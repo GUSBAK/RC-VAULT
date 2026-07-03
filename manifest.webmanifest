@@ -1,9 +1,9 @@
 {
-  "name": "RC Vault V15",
-  "short_name": "RC Vault",
+  "name": "The Hobbies Club V16",
+  "short_name": "Hobbies Club",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#eef5ff",
+  "background_color": "#060e1a",
   "theme_color": "#081527",
   "icons": [
     {
