@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { __test__ } from '../api/lookup.js';
 
-assert.equal(__test__.isBarcode('871-1234567890'.replace('-','')), true);
+assert.equal(__test__.isBarcode('8711234567890'), true);
 assert.equal(__test__.isBarcode('ARA-1606'), false);
 assert.equal(__test__.detectBrand('ARA-1606 Rear Arms'), 'ARRMA');
 assert.equal(__test__.detectBrand('Traxxas 6851R'), 'Traxxas');
+assert.equal(__test__.safeBrand('XRAY'), 'XRAY');
+assert.equal(__test__.safeBrand('Unknown'), 'Auto');
+assert.equal(__test__.xrayCode('301025'), '301025');
+assert.equal(__test__.xrayCode('303140-K'), '303140-K');
 
 const shopping = __test__.candidateFromShopping({
   title: 'ARRMA ARA-1606 Rear Arms (2)',
@@ -34,13 +38,10 @@ assert.equal(merged.length, 1);
 assert.equal(merged[0].brand, 'ARRMA');
 assert.ok(['High','Exact'].includes(merged[0].confidence));
 
+const xrayFixture = '<html><head><meta property="og:image" content="https://example.com/xray.jpg"></head><body>XRAY X4\'26 CARBON CHASSIS 2.2mm #301025 CNC-machined graphite chassis for XRAY X4. Stock status:</body></html>';
+const xray = __test__.xrayListingCandidate(xrayFixture, 'https://www.teamxray.com/teamxray/products/product_main.php', '301025');
+assert.equal(xray.brand, 'XRAY');
+assert.equal(xray.partNumber, '301025');
+assert.match(xray.title, /X4/);
+
 console.log('lookup mapper tests passed');
-
-assert.equal(__test__.hpiCode('HPI-101211'), '101211');
-assert.equal(__test__.hpiCode('101211'), '101211');
-const hpiFixture = `
-  <h3>This Part Fits the following kits / parts:</h3>
-  <ul><li>Bullet ST 3.0 STD</li><li>Bullet MT 3.0 STD</li></ul>`;
-assert.deepEqual(__test__.firstListAfter(hpiFixture), ['Bullet ST 3.0 STD', 'Bullet MT 3.0 STD']);
-
-console.log('HPI resolver utility tests passed');

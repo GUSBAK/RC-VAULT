@@ -11,7 +11,7 @@ global.fetch = async (url) => {
 };
 
 const response = { statusCode: 0, payload: null, setHeader(){}, status(code){ this.statusCode=code; return this; }, json(payload){ this.payload=payload; return this; } };
-await handler({ method:'GET', query:{ q:'101211' } }, response);
+await handler({ method:'GET', query:{ q:'101211', brand:'HPI Racing' } }, response);
 assert.equal(response.statusCode, 200);
 assert.equal(response.payload.ok, true);
 assert.equal(response.payload.results.length, 1);

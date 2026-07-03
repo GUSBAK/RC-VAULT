@@ -1,28 +1,37 @@
-# RC Vault V11 · reliable online SKU lookup
+# RC Vault V12 · brand-aware parts lookup and searchable vault
 
-## What V11 fixes
+## What changed
 
-V10 treated the presence of an environment-variable value as a live connection. A missing, expired, copied incorrectly, or over-quota key could therefore show as “connected” while every lookup failed.
+### Better lookup for XRAY and other brands
 
-V11 validates the two primary providers before lookup:
+A bare numeric part number is not unique across the RC world. V12 therefore adds a **Brand** selector before every lookup.
 
-- **Google via SerpApi**: checks the SerpApi account endpoint. This does not consume a search credit.
-- **Barcode Lookup**: checks the official rate-limit endpoint. This does not consume a product lookup.
-- **Go-UPC**: reports as configured until the first UPC or EAN request, because it does not expose a no-cost account-health endpoint in this package.
+- Select **XRAY** before checking an XRAY numeric part number, such as `301025`.
+- Select **HPI Racing** before checking an HPI number, such as `101211`.
+- Select **Auto** for UPC, EAN, GTIN, or part numbers that carry an unmistakable prefix, such as `ARA-1606`.
 
-It gives a clear failure reason inside the app, such as `invalid key`, `quota exceeded`, `timeout`, or `not configured`.
+V12 uses:
 
-## Important: the 101211 scan
+1. Direct HPI official resolver for HPI part numbers.
+2. Direct XRAY official route only when **XRAY** is selected.
+3. Barcode Lookup and Go-UPC for barcode coverage when their keys are present.
+4. Brand-aware Google and Google Shopping searches through SerpApi for Traxxas, ARRMA, Axial, Losi, Team Associated, Tamiya, Kyosho, Maverick, and any part not matched by an official route.
 
-`101211` is a **manufacturer part number**, not a UPC or EAN barcode. It is HPI Racing #101211, **Rod End Set**, for the Bullet Series. V11 has an exact HPI official resolver at:
+This prevents the old system from treating a numeric XRAY number as an unknown generic code or, worse, an unrelated HPI part.
 
-`https://www.hpiracing.com/en/part/101211`
+## New inventory features
 
-This official HPI resolver runs without any API key for HPI numeric part numbers. The app returns the title, brand, series, fitment, official product link, and availability when HPI returns it.
+- Manual **Price, SAR** field.
+- Stored **Product link** field.
+- Click a saved part to open a details screen.
+- Click the product name or image in lookup results to open its online listing.
+- Search My Vault by **brand**, **car name/platform**, **part number**, **barcode**, or any keyword.
+- CSV export now includes car name, price in SAR, and product link.
+- V12 migrates local records from V10 and V11 automatically on the same device.
 
-## Live data sources for all brands
+## Environment variables
 
-Set these in Vercel: **Project → Settings → Environment Variables**, then redeploy.
+Add your keys in Vercel under **Project → Settings → Environment Variables**, then redeploy:
 
 ```text
 SERPAPI_API_KEY=your_real_key
@@ -30,30 +39,19 @@ BARCODELOOKUP_API_KEY=your_real_key
 GOUPC_API_KEY=your_real_key
 ```
 
-Only SerpApi is necessary for a practical first setup. Barcode Lookup and Go-UPC add UPC, EAN, GTIN, and MPN coverage.
-
-V11 uses the following order:
-
-1. Exact HPI official page for HPI numeric part numbers.
-2. Barcode Lookup for UPC, EAN, GTIN, or MPN.
-3. Go-UPC for UPC and EAN values.
-4. One exact Google search through SerpApi. This avoids using two search credits per scan. It gives FCT Hobby Saudi priority whenever FCT appears in the online results.
-5. Google Shopping only when the exact Google results do not show a useful product match.
-
-## Use the built-in connection test
-
-After deployment, open RC Vault. The yellow or red notice at the top lists each provider and its exact status. Tap **Run connection test** after replacing a key.
-
-A valid setup will say `ready`, not merely `configured`.
+Only SerpApi is needed for wide, brand-aware online coverage. Barcode Lookup and Go-UPC help with UPC, EAN, and GTIN labels.
 
 ## Deploy
 
-1. Extract the zip.
-2. Upload all extracted files to the root of your Vercel project.
-3. Add your environment variables.
+1. Extract the ZIP.
+2. Upload the extracted files to the root of your Vercel project.
+3. Add environment variables.
 4. Redeploy.
-5. Fully close the installed iPhone web app, then reopen it.
+5. Open the new deployment in Safari.
+6. Delete the old Home Screen RC Vault icon and add the new one again.
 
-## Local data
+The header must show **V12.0**. This confirms the installed copy is current.
 
-Your saved vault records stay in the browser on that device. Export CSV regularly from **My vault**.
+## Important usage note
+
+Use **brand selection** for labels that provide only a number. The app cannot safely know whether an unbranded six-digit number belongs to XRAY, HPI, Traxxas, or another manufacturer without a barcode database match or a brand clue.

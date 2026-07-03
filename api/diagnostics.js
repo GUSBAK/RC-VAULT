@@ -71,7 +71,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Use GET.' });
   }
   const [serpApi, barcodeLookup] = await Promise.all([checkSerpApi(), checkBarcodeLookup()]);
-  const providers = { serpApi, barcodeLookup, goUpc: checkGoUpc() };
+  const providers = {
+    hpiOfficial: { state: 'available', detail: 'Built-in direct lookup for HPI part numbers.' },
+    xrayOfficial: { state: 'available', detail: 'Built-in brand-scoped lookup. Select XRAY before checking a numeric part code.' },
+    serpApi,
+    barcodeLookup,
+    goUpc: checkGoUpc()
+  };
   responseHeaders(res);
   return res.status(200).json({ ok: true, providers });
 }
