@@ -1,8 +1,8 @@
-# RC Vault V13 · Local database, backup and restore
+# RC Vault V14 · Local database, backup and restore
 
 ## What changed
 
-RC Vault V13 saves your inventory in **IndexedDB**, a local database inside the browser on the device running the app.
+RC Vault V14 saves your inventory in **IndexedDB**, a local database inside the browser on the device running the app.
 
 - Your parts stay on your iPhone, iPad, Mac, or computer.
 - Nothing is uploaded to a cloud database by this feature.
@@ -42,3 +42,8 @@ Create a JSON backup before major changes, before changing device, and at least 
 ## Online lookup
 
 The lookup service remains unchanged. Keep your valid `SERPAPI_API_KEY` in Vercel for brand-aware Google and Shopping lookup. Barcode Lookup and Go-UPC remain optional sources for UPC, EAN, and GTIN labels.
+
+
+## Direct backup download
+
+Click **Download JSON**. On macOS, Safari saves the full JSON backup directly in the **Downloads** folder. This version does not open the macOS share sheet, so no Share extension is needed. On iPhone or iPad, the file downloads locally, then can be moved from Downloads to Files.
