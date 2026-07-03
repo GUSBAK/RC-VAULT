@@ -1,15 +1,12 @@
-# The Hobbies Club V16
-
-This version updates the app look and branding.
+# The Hobbies Club V17
 
 ## Changes
 
-- Renamed the app from RC Vault to **The Hobbies Club**.
-- Replaced the app icon and logo with the attached The Hobbies Club artwork.
-- Enlarged the header logo.
-- Switched the app to a darker screen theme.
-- Updated buttons to use the same blue gradient style as the Fastest workflow card.
-
-## Deploy
+- Added support for saving **RC cars** in the same inventory as parts.
+- Added **Item type** with RC part or RC car.
+- Added **Add RC car** button.
+- Added **All items / RC parts / RC cars** filter in the vault.
+- Updated the vault table and item details to show the item type.
+- Replaced the logo assets with a **transparent background** version for the app.
 
 Replace the current project files with this version and redeploy on the same Vercel project.
