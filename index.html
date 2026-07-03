@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b3528" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RC Vault" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="favicon-32.png" />
+  <title>RC Vault · Online SKU Lookup</title>
+  <script src="vendor/zxing-browser.min.js" defer></script>
+  <style>
+    :root {
+      --ink: #14251e;
+      --muted: #6d7b73;
+      --paper: #f5f8f6;
+      --surface: #ffffff;
+      --green: #147049;
+      --green-dark: #0b4932;
+      --green-soft: #e7f5ec;
+      --line: #dce8e0;
+      --yellow: #8b6514;
+      --yellow-soft: #fff7df;
+      --red: #bb3a45;
+      --shadow: 0 12px 34px rgba(28, 57, 42, .11);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    a { color: var(--green-dark); }
+    .shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 22px 0 56px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:24px; }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .brand img { width:46px; height:46px; border-radius:13px; object-fit:cover; box-shadow:0 6px 16px rgba(12,61,42,.18); }
+    h1 { font-size:23px; margin:0; letter-spacing:-.03em; }
+    .subhead { margin:3px 0 0; color:var(--muted); font-size:13px; }
+    .nav { display:flex; gap:6px; padding:5px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    .nav button { border:0; padding:9px 12px; border-radius:10px; background:transparent; color:var(--muted); font-weight:700; }
+    .nav button.active { color:#fff; background:var(--green-dark); }
+    .notice { display:none; gap:10px; align-items:flex-start; border:1px solid #efd896; border-radius:14px; padding:13px 15px; background:var(--yellow-soft); color:#6c5418; font-size:13px; line-height:1.45; margin-bottom:18px; }
+    .notice.show { display:flex; }
+    .notice strong { display:block; color:#5b4310; margin-bottom:2px; }
+    .view { display:none; }
+    .view.active { display:block; }
+    .hero { display:grid; grid-template-columns: minmax(0, 1fr) 330px; gap:20px; margin-bottom:20px; }
+    .card { border:1px solid var(--line); border-radius:20px; background:var(--surface); box-shadow:var(--shadow); }
+    .lookup-card { padding:28px; }
+    .eyebrow { color:var(--green); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    h2 { margin:8px 0 8px; font-size:30px; letter-spacing:-.045em; line-height:1.1; }
+    .lookup-card > p { margin:0 0 22px; color:var(--muted); line-height:1.5; }
+    .lookup-form { display:flex; gap:10px; }
+    .lookup-form input { flex:1; min-width:0; padding:15px 16px; border:1px solid #bacfc2; border-radius:13px; outline:none; background:#fff; font-weight:700; letter-spacing:.02em; }
+    .lookup-form input:focus { border-color:var(--green); box-shadow:0 0 0 4px rgba(20,112,73,.12); }
+    .primary, .secondary, .outline, .danger, .icon-btn { border:1px solid transparent; border-radius:12px; padding:12px 15px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .primary { color:#fff; background:var(--green); }
+    .primary:hover { background:#0f5c3b; }
+    .secondary { color:var(--green-dark); background:var(--green-soft); border-color:#c5e7d2; }
+    .outline { color:var(--ink); background:#fff; border-color:var(--line); }
+    .danger { color:#fff; background:var(--red); }
+    .lookup-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:13px; }
+    .scan-card { padding:22px; display:flex; flex-direction:column; justify-content:space-between; background:linear-gradient(160deg,#0b4932,#156b49); color:#fff; }
+    .scan-card h3 { margin:0 0 9px; font-size:20px; letter-spacing:-.025em; }
+    .scan-card p { margin:0; color:rgba(255,255,255,.79); line-height:1.5; font-size:13px; }
+    .scan-card .primary { margin-top:20px; color:#093c27; background:#fff; }
+    .scan-card .primary:hover { background:#eff8f2; }
+    .how { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+    .how span { color:#d8f1e3; border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:6px 10px; font-size:11px; font-weight:700; }
+    .result-wrap { min-height: 210px; }
+    .results-title { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 12px; }
+    .results-title h3 { margin:0; font-size:18px; }
+    .small { color:var(--muted); font-size:12px; }
+    .status-row { display:flex; flex-wrap:wrap; gap:7px; }
+    .status-pill { padding:5px 8px; border-radius:999px; background:#eff4f0; color:#5f6e64; font-size:11px; font-weight:800; }
+    .status-pill.ok { background:var(--green-soft); color:var(--green-dark); }
+    .status-pill.fail { background:#fff0f0; color:#9a3740; }
+    .empty { border:1px dashed #b9ccc0; border-radius:16px; padding:30px; color:var(--muted); text-align:center; background:#fbfdfb; line-height:1.5; }
+    .loading { display:flex; align-items:center; justify-content:center; gap:10px; padding:35px; color:var(--muted); }
+    .spinner { width:18px; height:18px; border-radius:50%; border:2px solid #cfddd4; border-top-color:var(--green); animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+    .product { overflow:hidden; border:1px solid var(--line); border-radius:18px; background:#fff; }
+    .product-main { display:flex; gap:13px; padding:14px; }
+    .product-image, .product-placeholder { width:88px; height:88px; border-radius:13px; flex:0 0 88px; object-fit:cover; background:#eef5f0; border:1px solid #e0ece4; }
+    .product-placeholder { display:grid; place-items:center; font-size:31px; }
+    .product-title { min-width:0; flex:1; }
+    .product-title h4 { margin:3px 0 6px; font-size:16px; letter-spacing:-.02em; line-height:1.25; }
+    .product-title p { margin:0; color:var(--muted); font-size:12px; line-height:1.4; }
+    .badges { display:flex; flex-wrap:wrap; gap:6px; }
+    .badge { padding:4px 7px; border-radius:999px; font-size:10px; font-weight:800; background:#edf3ef; color:#516359; }
+    .badge.exact { color:#05653c; background:#e3f5e9; }
+    .badge.likely { color:#725710; background:#fff1c9; }
+    .specs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:0 14px 12px; }
+    .spec { padding:8px 9px; border:1px solid #e1ece5; border-radius:10px; background:#fcfdfc; min-width:0; }
+    .spec label { display:block; margin-bottom:3px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .spec strong { display:block; font-size:12px; overflow-wrap:anywhere; }
+    .description { padding:0 14px 12px; margin:0; font-size:12px; color:#4d5e53; line-height:1.45; }
+    .sources { border-top:1px solid #e4ede7; padding:12px 14px; }
+    .sources h5 { margin:0 0 7px; font-size:11px; color:var(--muted); letter-spacing:.05em; text-transform:uppercase; }
+    .source { display:flex; justify-content:space-between; gap:12px; padding:7px 0; font-size:12px; border-top:1px solid #eff4f0; }
+    .source:first-of-type { border-top:0; }
+    .source-left { min-width:0; }
+    .source-left a { font-weight:800; text-decoration:none; overflow-wrap:anywhere; }
+    .source-meta { color:var(--muted); margin-top:2px; }
+    .source-price { white-space:nowrap; font-weight:800; color:var(--green-dark); }
+    .product-actions { display:flex; gap:8px; padding:12px 14px; border-top:1px solid #e4ede7; background:#fbfdfb; }
+    .product-actions button, .product-actions a { flex:1; min-width:0; padding:10px 11px; font-size:12px; }
+    .confidence-note { margin:12px 0 0; color:var(--muted); font-size:11px; line-height:1.45; }
+    .vault-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 20px; margin-bottom:14px; }
+    .vault-toolbar h2 { margin:0; font-size:22px; }
+    .vault-toolbar p { margin:3px 0 0; color:var(--muted); font-size:13px; }
+    .vault-actions { display:flex; gap:8px; }
+    .table-card { overflow:hidden; }
+    .inventory { width:100%; border-collapse:collapse; background:#fff; }
+    .inventory th, .inventory td { padding:13px 14px; border-bottom:1px solid #ecf1ee; text-align:left; vertical-align:top; }
+    .inventory th { color:var(--muted); background:#fbfdfb; font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+    .part-cell { display:flex; gap:9px; min-width:200px; }
+    .part-cell img, .part-mini { width:42px; height:42px; border-radius:9px; object-fit:cover; background:#edf4ef; flex:0 0 42px; }
+    .part-mini { display:grid; place-items:center; font-size:17px; }
+    .part-cell strong { display:block; font-size:13px; line-height:1.3; }
+    .part-cell span { display:block; color:var(--muted); font-size:11px; margin-top:3px; }
+    .row-actions { display:flex; gap:6px; }
+    .icon-btn { min-width:34px; min-height:34px; padding:7px; background:#fff; border-color:var(--line); color:var(--ink); }
+    .icon-btn.delete { color:var(--red); border-color:#f0c9cd; }
+    .table-empty { padding:44px 20px; text-align:center; color:var(--muted); }
+    .modal-backdrop { position:fixed; inset:0; z-index:20; padding:18px; display:none; align-items:center; justify-content:center; background:rgba(8,25,18,.64); }
+    .modal-backdrop.show { display:flex; }
+    .modal { width:min(610px,100%); max-height:min(92vh,780px); overflow:auto; border-radius:22px; background:#fff; box-shadow:0 25px 70px rgba(0,0,0,.26); }
+    .modal-wide { width:min(860px,100%); }
+    .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px 14px; border-bottom:1px solid var(--line); }
+    .modal-head h3 { margin:0; font-size:21px; letter-spacing:-.03em; }
+    .modal-head p { margin:5px 0 0; color:var(--muted); font-size:13px; line-height:1.4; }
+    .close { width:34px; height:34px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:19px; }
+    .modal-body { padding:20px 22px 22px; }
+    .scan-stage { position:relative; overflow:hidden; min-height:360px; background:#070c09; }
+    #scannerVideo { width:100%; height:420px; display:block; object-fit:cover; background:#060806; }
+    .scan-guide { position:absolute; left:10%; right:10%; top:32%; height:32%; border:2px solid rgba(255,255,255,.92); border-radius:16px; box-shadow:0 0 0 200vmax rgba(0,0,0,.35); pointer-events:none; }
+    .scan-caption { position:absolute; left:0; right:0; bottom:0; padding:12px 16px; color:#fff; text-align:center; font-weight:700; font-size:13px; background:linear-gradient(transparent,rgba(0,0,0,.76)); }
+    .scan-controls { display:flex; flex-wrap:wrap; gap:9px; padding:14px; border-top:1px solid #17231d; background:#0c1510; }
+    .scan-controls .outline { color:#fff; background:#15241d; border-color:#2a3c32; }
+    .scan-controls .secondary { color:#0b3f2b; background:#dbf3e5; }
+    .scan-feedback { padding:0 16px 16px; margin:0; color:#d9e6de; background:#0c1510; text-align:center; font-size:12px; min-height:35px; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .field { display:flex; flex-direction:column; gap:6px; }
+    .field.full { grid-column:1/-1; }
+    .field label { color:#53675a; font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+    .field input, .field textarea, .field select { padding:11px 12px; border:1px solid #c8d8cd; border-radius:10px; outline:none; background:#fff; }
+    .field textarea { min-height:84px; resize:vertical; }
+    .form-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+    .toast { position:fixed; left:50%; bottom:22px; z-index:50; transform:translateX(-50%) translateY(120px); transition:transform .25s ease; padding:12px 15px; border-radius:12px; background:#102c20; color:#fff; box-shadow:0 14px 35px rgba(0,0,0,.23); font-size:13px; font-weight:700; }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+    @media (max-width:760px) { .shell { width:min(100% - 24px, 1120px); padding-top:14px; } .topbar { align-items:flex-start; flex-direction:column; } .nav { width:100%; } .nav button { flex:1; } .hero { grid-template-columns:1fr; } .lookup-card { padding:22px; } h2 { font-size:27px; } .lookup-form { flex-direction:column; } .lookup-form button { width:100%; } .inventory th:nth-child(3), .inventory td:nth-child(3), .inventory th:nth-child(4), .inventory td:nth-child(4) { display:none; } .vault-toolbar { align-items:flex-start; flex-direction:column; } .vault-actions { width:100%; } .vault-actions button { flex:1; } .form-grid { grid-template-columns:1fr; } .field.full { grid-column:auto; } .modal-backdrop { padding:0; align-items:flex-end; } .modal { width:100%; max-height:94vh; border-radius:23px 23px 0 0; } .scan-stage { min-height:420px; } #scannerVideo { height:500px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="icon-192.png" alt="RC Vault" />
+        <div><h1>RC Vault</h1><p class="subhead">Scan a code. Get live RC SKU details. Save the right part.</p></div>
+      </div>
+      <nav class="nav" aria-label="App views">
+        <button id="lookupTab" class="active" type="button">SKU lookup</button>
+        <button id="vaultTab" type="button">My vault</button>
+      </nav>
+    </header>
+
+    <section id="connectionNotice" class="notice" role="status"></section>
+
+    <section id="lookupView" class="view active">
+      <div class="hero">
+        <section class="card lookup-card">
+          <div class="eyebrow">Online RC parts lookup</div>
+          <h2>Find the SKU behind the label.</h2>
+          <p>Scan a UPC, EAN, GTIN, or type the manufacturer part number. RC Vault checks live product sources and shows the strongest matches before you save.</p>
+          <form id="lookupForm" class="lookup-form">
+            <input id="queryInput" inputmode="text" autocomplete="off" placeholder="Barcode or part number, for example ARA-1606" aria-label="Barcode or part number" />
+            <button id="lookupSubmit" class="primary" type="submit">Check online</button>
+          </form>
+          <div class="lookup-actions">
+            <button id="openScannerBtn" class="secondary" type="button">▣ Scan barcode</button>
+            <button id="scanPhotoBtn" class="outline" type="button">▧ Scan photo</button>
+            <input id="photoInput" type="file" accept="image/*" capture="environment" hidden />
+          </div>
+        </section>
+        <aside class="card scan-card">
+          <div><h3>Fastest workflow</h3><p>Use the manufacturer part number when the barcode brings back nothing. RC labels often carry both.</p></div>
+          <div class="how"><span>1. Scan</span><span>2. Confirm match</span><span>3. Save to vault</span></div>
+          <button id="scanHeroBtn" class="primary" type="button">Open camera</button>
+        </aside>
+      </div>
+
+      <section class="result-wrap">
+        <div class="results-title"><h3>Results</h3><div id="providerStatus" class="status-row"></div></div>
+        <div id="resultsArea" class="empty">Start with a barcode or manufacturer part number. The app will show details here.</div>
+      </section>
+    </section>
+
+    <section id="vaultView" class="view">
+      <section class="card vault-toolbar">
+        <div><h2>My vault</h2><p id="vaultSummary">No saved parts yet.</p></div>
+        <div class="vault-actions"><button id="exportBtn" class="outline" type="button">Export CSV</button><button id="addBlankBtn" class="primary" type="button">Add manually</button></div>
+      </section>
+      <section class="card table-card">
+        <table class="inventory"><thead><tr><th>Part</th><th>Qty</th><th>Bin</th><th>Source</th><th>Actions</th></tr></thead><tbody id="inventoryBody"></tbody></table>
+        <div id="vaultEmpty" class="table-empty">Your saved parts will appear here.</div>
+      </section>
+    </section>
+  </main>
+
+  <div id="scanModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head"><div><h3 id="scanTitle">Scan barcode</h3><p>Hold the barcode inside the guide. A successful read starts the live lookup automatically.</p></div><button class="close" type="button" data-close="scanModal" aria-label="Close">×</button></div>
+      <div class="scan-stage"><video id="scannerVideo" muted playsinline></video><div class="scan-guide"></div><div class="scan-caption">Use good light. Keep the code sharp and level.</div></div>
+      <div class="scan-controls"><button id="torchBtn" class="outline" type="button" hidden>◉ Light</button><button id="captureBtn" class="secondary" type="button">Capture and read</button><button id="scanPhotoModalBtn" class="outline" type="button">Choose photo</button><button id="stopScanBtn" class="outline" type="button">Close camera</button></div>
+      <p id="scanFeedback" class="scan-feedback">Starting camera…</p>
+    </div>
+  </div>
+
+  <div id="saveModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+    <form id="saveForm" class="modal">
+      <div class="modal-head"><div><h3 id="saveTitle">Save part to vault</h3><p>Check the result, then add your quantity and storage bin.</p></div><button class="close" type="button" data-close="saveModal" aria-label="Close">×</button></div>
+      <div class="modal-body">
+        <input id="partId" type="hidden" />
+        <div class="form-grid">
+          <div class="field full"><label for="partName">Part name</label><input id="partName" required /></div>
+          <div class="field"><label for="partBrand">Brand</label><input id="partBrand" /></div>
+          <div class="field"><label for="partNumber">Part number</label><input id="partNumber" /></div>
+          <div class="field"><label for="partBarcode">Barcode</label><input id="partBarcode" inputmode="numeric" /></div>
+          <div class="field"><label for="partQty">Quantity</label><input id="partQty" required min="0" step="1" type="number" value="1" /></div>
+          <div class="field"><label for="partBin">Storage bin</label><input id="partBin" placeholder="For example, Shelf A / Box 3" /></div>
+          <div class="field"><label for="partCategory">Category</label><input id="partCategory" /></div>
+          <div class="field"><label for="partSource">Source</label><input id="partSource" /></div>
+          <div class="field full"><label for="partImage">Image URL</label><input id="partImage" type="url" placeholder="https://" /></div>
+          <div class="field full"><label for="partNotes">Notes</label><textarea id="partNotes" placeholder="Fitment, condition, car platform, or anything useful."></textarea></div>
+        </div>
+        <div class="form-footer"><button class="outline" type="button" data-close="saveModal">Cancel</button><button class="primary" type="submit">Save to vault</button></div>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const $$ = selector => [...document.querySelectorAll(selector)];
+    const STORAGE_KEY = 'rc-vault-v10.inventory';
+    const LOOKUP_CACHE = 'rc-vault-v10.lookup-cache';
+    const state = { inventory: loadInventory(), reader: null, controls: null, stream: null, scanning: false, handlingCode: false, torch: false, lastLookup: null, toastTimer: null };
+
+    function escapeHtml(value = '') { return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#039;', '"':'&quot;' }[c])); }
+    function text(value = '') { return String(value ?? '').trim(); }
+    function safeUrl(value = '') { try { const url = new URL(text(value)); return /^https?:$/.test(url.protocol) ? url.toString() : ''; } catch { return ''; } }
+    function loadInventory() { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
+    function saveInventory() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.inventory)); renderVault(); }
+    function uid() { return crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
+    function openModal(id) { $(`#${id}`).classList.add('show'); }
+    function closeModal(id) { $(`#${id}`).classList.remove('show'); if (id === 'scanModal') stopScanner(); }
+    function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
+    function displayView(name) { $('#lookupView').classList.toggle('active', name === 'lookup'); $('#vaultView').classList.toggle('active', name === 'vault'); $('#lookupTab').classList.toggle('active', name === 'lookup'); $('#vaultTab').classList.toggle('active', name === 'vault'); }
+    function formatPrice(source) { const price = text(source.price); if (!price) return ''; return `${price}${source.currency ? ` ${source.currency}` : ''}`.trim(); }
+    function codeValue(c) { return text(c.partNumber || c.barcode || c.sku || ''); }
+    function sourceHtml(source) {
+      const url = safeUrl(source.url); const name = escapeHtml(source.supplier || 'Online source'); const price = escapeHtml(formatPrice(source));
+      const meta = [source.sourceType, source.availability].filter(Boolean).map(escapeHtml).join(' · ');
+      return `<div class="source"><div class="source-left">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>` : `<strong>${name}</strong>`}<div class="source-meta">${meta}</div></div><div class="source-price">${price}</div></div>`;
+    }
+    function candidateHtml(candidate, index) {
+      const image = safeUrl(candidate.imageUrl); const title = escapeHtml(candidate.title); const code = escapeHtml(codeValue(candidate)); const brand = escapeHtml(candidate.brand || 'Not supplied'); const category = escapeHtml(candidate.category || 'Not supplied');
+      const source = candidate.sources?.[0]; const productLink = safeUrl(source?.url);
+      const description = escapeHtml(candidate.description || 'No description was supplied by the online result.');
+      const badgeClass = candidate.confidence === 'Exact' || candidate.confidence === 'High' ? 'exact' : 'likely';
+      const sources = (candidate.sources || []).slice(0, 3).map(sourceHtml).join('') || '<div class="source"><div class="source-left"><strong>No supplier listing supplied</strong></div></div>';
+      return `<article class="product">
+        <div class="product-main">${image ? `<img class="product-image" src="${escapeHtml(image)}" alt="" />` : '<div class="product-placeholder">⚙</div>'}
+          <div class="product-title"><div class="badges"><span class="badge ${badgeClass}">${escapeHtml(candidate.confidence)} match</span>${candidate.provenance?.map(p => `<span class="badge">${escapeHtml(p)}</span>`).join('') || ''}</div><h4>${title}</h4><p>${brand}</p></div>
+        </div>
+        <div class="specs"><div class="spec"><label>Part number</label><strong>${code || 'Not supplied'}</strong></div><div class="spec"><label>Category</label><strong>${category}</strong></div></div>
+        <p class="description">${description}</p>
+        <div class="sources"><h5>Online sources</h5>${sources}</div>
+        <div class="product-actions"><button class="primary" type="button" data-save-result="${index}">Save to vault</button>${productLink ? `<a class="outline" href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer">Open listing</a>` : ''}</div>
+      </article>`;
+    }
+    function providerPill(name, status) { const isOk = ['matched','ok'].includes(status); const isFail = status === 'error'; return `<span class="status-pill ${isOk ? 'ok' : isFail ? 'fail' : ''}">${escapeHtml(name)}: ${escapeHtml(status.replace(/_/g,' '))}</span>`; }
+    function renderProviderStatus(status = {}) { $('#providerStatus').innerHTML = Object.entries(status).map(([name, value]) => providerPill(name.replace('serpApi','Google').replace('goUpc','Go-UPC'), value)).join(''); }
+    function renderResults(payload) {
+      state.lastLookup = payload;
+      const status = payload.providerStatus || {}; renderProviderStatus(status);
+      if (payload.needsConfiguration) { $('#resultsArea').innerHTML = `<div class="empty"><strong>Live lookup is not connected yet.</strong><br>${escapeHtml(payload.message)}<br><span class="small">Once deployed, add the key in Vercel. The app will then return online results here.</span></div>`; return; }
+      if (!payload.results?.length) { $('#resultsArea').innerHTML = `<div class="empty"><strong>No reliable product match.</strong><br>${escapeHtml(payload.message || '')}<br><span class="small">Use the exact printed manufacturer code, including letters and dashes. Do not save a guess.</span></div>`; return; }
+      $('#resultsArea').innerHTML = `<div class="result-grid">${payload.results.map(candidateHtml).join('')}</div><p class="confidence-note">Online matches can be incomplete. Confirm the part number and fitment before saving. FCT Hobby Saudi is given priority when it appears in the live results.</p>`;
+    }
+    function setLoading() { $('#resultsArea').innerHTML = '<div class="loading"><span class="spinner"></span>Checking live product sources…</div>'; $('#providerStatus').innerHTML = ''; }
+    function cacheLookup(query, payload) { try { const cache = JSON.parse(localStorage.getItem(LOOKUP_CACHE) || '{}'); cache[query.toLowerCase()] = { savedAt: Date.now(), payload }; localStorage.setItem(LOOKUP_CACHE, JSON.stringify(cache)); } catch {} }
+    async function runLookup(raw, forceOnline = true) {
+      const query = text(raw).slice(0, 64); if (query.length < 2) { showToast('Enter a barcode or manufacturer part number.'); return; }
+      $('#queryInput').value = query; setLoading(); $('#lookupSubmit').disabled = true;
+      try {
+        const response = await fetch(`/api/lookup?q=${encodeURIComponent(query)}`, { headers: { Accept:'application/json' }, cache: forceOnline ? 'no-store' : 'default' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Lookup failed.');
+        cacheLookup(query, payload); renderResults(payload);
+      } catch (error) {
+        $('#resultsArea').innerHTML = `<div class="empty"><strong>Online lookup could not complete.</strong><br>${escapeHtml(error.message || 'Check the Vercel deployment and try again.')}<br><span class="small">The lookup service runs only from the deployed app, not from a local HTML file.</span></div>`;
+      } finally { $('#lookupSubmit').disabled = false; }
+    }
+    function renderVault() {
+      const body = $('#inventoryBody'); const empty = $('#vaultEmpty'); const total = state.inventory.reduce((sum, part) => sum + Number(part.quantity || 0), 0);
+      $('#vaultSummary').textContent = state.inventory.length ? `${state.inventory.length} saved parts · ${total} total pieces` : 'No saved parts yet.';
+      empty.hidden = Boolean(state.inventory.length); body.innerHTML = state.inventory.map(part => {
+        const image = safeUrl(part.imageUrl); const title = escapeHtml(part.name || 'Untitled part'); const code = escapeHtml(part.partNumber || part.barcode || 'No part number');
+        return `<tr><td><div class="part-cell">${image ? `<img src="${escapeHtml(image)}" alt="" />` : '<div class="part-mini">⚙</div>'}<div><strong>${title}</strong><span>${escapeHtml(part.brand || 'Unknown brand')} · ${code}</span></div></div></td><td><strong>${Number(part.quantity || 0)}</strong></td><td>${escapeHtml(part.bin || '—')}</td><td>${escapeHtml(part.source || '—')}</td><td><div class="row-actions"><button class="icon-btn" type="button" data-add-one="${escapeHtml(part.id)}" title="Add one">＋</button><button class="icon-btn" type="button" data-edit-part="${escapeHtml(part.id)}" title="Edit">✎</button><button class="icon-btn delete" type="button" data-delete-part="${escapeHtml(part.id)}" title="Delete">⌫</button></div></td></tr>`;
+      }).join('');
+    }
+    function openSaveForm(part = {}) {
+      $('#partId').value = part.id || ''; $('#partName').value = part.name || part.title || ''; $('#partBrand').value = part.brand || ''; $('#partNumber').value = part.partNumber || ''; $('#partBarcode').value = part.barcode || ''; $('#partQty').value = part.quantity ?? 1; $('#partBin').value = part.bin || ''; $('#partCategory').value = part.category || ''; $('#partSource').value = part.source || part.sources?.[0]?.supplier || ''; $('#partImage').value = part.imageUrl || ''; $('#partNotes').value = part.notes || part.description || ''; openModal('saveModal'); setTimeout(() => $('#partName').focus(), 100);
+    }
+    function saveResult(index) { const candidate = state.lastLookup?.results?.[Number(index)]; if (!candidate) return; openSaveForm({ ...candidate, source: candidate.sources?.[0]?.supplier || candidate.provenance?.[0] || '' }); }
+    function submitSave() {
+      const id = $('#partId').value || uid(); const part = { id, name:text($('#partName').value), brand:text($('#partBrand').value), partNumber:text($('#partNumber').value), barcode:text($('#partBarcode').value), quantity:Math.max(0, Number($('#partQty').value || 0)), bin:text($('#partBin').value), category:text($('#partCategory').value), source:text($('#partSource').value), imageUrl:safeUrl($('#partImage').value), notes:text($('#partNotes').value), updatedAt:new Date().toISOString() };
+      if (!part.name) { showToast('Part name is required.'); return; }
+      const position = state.inventory.findIndex(item => item.id === id); if (position >= 0) state.inventory[position] = part; else state.inventory.unshift(part); saveInventory(); closeModal('saveModal'); showToast(position >= 0 ? 'Part updated.' : 'Part saved to your vault.');
+    }
+    function addOne(id) { const part = state.inventory.find(item => item.id === id); if (!part) return; part.quantity = Number(part.quantity || 0) + 1; part.updatedAt = new Date().toISOString(); saveInventory(); showToast('Quantity increased by one.'); }
+    function deletePart(id) { const part = state.inventory.find(item => item.id === id); if (!part) return; if (!confirm(`Delete “${part.name}” from your vault?`)) return; state.inventory = state.inventory.filter(item => item.id !== id); saveInventory(); showToast('Part deleted.'); }
+    function exportCsv() {
+      if (!state.inventory.length) { showToast('Your vault is empty.'); return; }
+      const headers = ['Name','Brand','Part Number','Barcode','Quantity','Bin','Category','Source','Notes']; const csv = [headers, ...state.inventory.map(item => [item.name,item.brand,item.partNumber,item.barcode,item.quantity,item.bin,item.category,item.source,item.notes])].map(row => row.map(value => `"${String(value ?? '').replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='rc-vault.csv'; a.click(); URL.revokeObjectURL(url);
+    }
+    function scannerAvailable() { return Boolean(navigator.mediaDevices?.getUserMedia && window.ZXingBrowser?.BrowserMultiFormatReader); }
+    function activeTrack() { return state.stream?.getVideoTracks?.()[0] || null; }
+    function resetScan() { state.scanning = false; state.handlingCode = false; state.torch = false; $('#torchBtn').hidden = true; $('#torchBtn').textContent = '◉ Light'; }
+    async function startScanner() {
+      openModal('scanModal'); if (!scannerAvailable()) { $('#scanFeedback').textContent = 'Scanner engine is not available. Use Scan photo or type the code.'; return; }
+      if (state.scanning) return; resetScan(); state.scanning=true; $('#scanFeedback').textContent='Starting rear camera…';
+      try {
+        const constraints = { audio:false, video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30,max:30} } };
+        state.stream = await navigator.mediaDevices.getUserMedia(constraints); const video=$('#scannerVideo'); video.srcObject=state.stream; await video.play();
+        const caps=activeTrack()?.getCapabilities?.(); if (caps?.torch) $('#torchBtn').hidden=false;
+        state.reader = new ZXingBrowser.BrowserMultiFormatReader(undefined,{ delayBetweenScanAttempts:150, delayBetweenScanSuccess:600 });
+        state.controls = await state.reader.decodeFromVideoElement(video, (result) => { const value=result?.getText?.() || result?.text || ''; if (value && state.scanning && !state.handlingCode) handleScannedCode(value); });
+        $('#scanFeedback').textContent='Scanning automatically. Hold the code flat inside the guide.';
+      } catch (error) { resetScan(); $('#scanFeedback').textContent='Camera could not start. Allow camera access, reload the app, or use Scan photo.'; }
+    }
+    async function stopScanner() { const control=state.controls; state.controls=null; try { await control?.stop?.(); } catch {} state.reader=null; if (state.stream) { state.stream.getTracks().forEach(track=>track.stop()); state.stream=null; } const video=$('#scannerVideo'); if (video) { try { video.pause(); } catch {} video.srcObject=null; } resetScan(); }
+    async function handleScannedCode(value) { const code=text(value); if (!code) return; state.handlingCode=true; try { navigator.vibrate?.(70); $('#scanFeedback').textContent=`Read ${code}. Checking online…`; await stopScanner(); closeModal('scanModal'); displayView('lookup'); await runLookup(code); } finally { state.handlingCode=false; } }
+    async function captureFrame() {
+      const video=$('#scannerVideo'); if (!video.videoWidth || !video.videoHeight) { $('#scanFeedback').textContent='Camera is still starting. Try again in a second.'; return; }
+      const canvas=document.createElement('canvas'); canvas.width=video.videoWidth; canvas.height=video.videoHeight; canvas.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0); $('#scanFeedback').textContent='Reading captured frame…';
+      try { const reader=new ZXingBrowser.BrowserMultiFormatReader(); const result=reader.decodeFromCanvas(canvas); const value=result?.getText?.() || result?.text || ''; if (value) await handleScannedCode(value); else throw new Error('Not found'); } catch { $('#scanFeedback').textContent='No code found. Move closer, increase light, and let the barcode fill the guide.'; }
+    }
+    async function scanPhoto(file) {
+      if (!file) return; displayView('lookup'); openModal('scanModal'); $('#scanFeedback').textContent='Reading barcode from photo…'; await stopScanner();
+      const url=URL.createObjectURL(file); const image=new Image(); image.onload=async ()=>{ try { const reader=new ZXingBrowser.BrowserMultiFormatReader(); const result=await reader.decodeFromImageElement(image); const value=result?.getText?.() || result?.text || ''; URL.revokeObjectURL(url); if (value) await handleScannedCode(value); else throw new Error('Not found'); } catch { URL.revokeObjectURL(url); $('#scanFeedback').textContent='The photo could not be read. Use a tighter photo with one barcode filling the frame.'; } }; image.onerror=()=>{ URL.revokeObjectURL(url); $('#scanFeedback').textContent='The photo could not be opened.'; }; image.src=url;
+    }
+    async function toggleTorch() { const track=activeTrack(); if (!track?.applyConstraints) return; try { state.torch=!state.torch; await track.applyConstraints({advanced:[{torch:state.torch}]}); $('#torchBtn').textContent=state.torch?'◉ Light on':'◉ Light'; } catch { $('#scanFeedback').textContent='This camera does not support the light control.'; } }
+    async function checkConnection() { try { const response=await fetch('/api/health',{cache:'no-store'}); const data=await response.json(); if (!data.ok) return; const providers=data.providers||{}; const enabled=Object.values(providers).filter(Boolean).length; if (!enabled) $('#connectionNotice').innerHTML='<div>⚠</div><div><strong>Live lookup needs one key.</strong>Add <code>SERPAPI_API_KEY</code> in Vercel, then redeploy. Without it, the app cannot return online SKU details.</div>'; else $('#connectionNotice').innerHTML=`<div>●</div><div><strong>${enabled} live data ${enabled===1?'source':'sources'} connected.</strong>Barcode databases and Google sources return different coverage. The app combines them and shows the confidence.</div>`; $('#connectionNotice').classList.add('show'); } catch { $('#connectionNotice').innerHTML='<div>⚠</div><div><strong>Run this on Vercel.</strong>The online lookup API is not available when the HTML file is opened directly.</div>'; $('#connectionNotice').classList.add('show'); } }
+    $('#lookupForm').addEventListener('submit', event=>{ event.preventDefault(); runLookup($('#queryInput').value); });
+    $('#openScannerBtn').addEventListener('click', startScanner); $('#scanHeroBtn').addEventListener('click', startScanner); $('#scanPhotoBtn').addEventListener('click',()=>$('#photoInput').click()); $('#scanPhotoModalBtn').addEventListener('click',()=>$('#photoInput').click()); $('#photoInput').addEventListener('change', event=>{ scanPhoto(event.target.files?.[0]); event.target.value=''; });
+    $('#captureBtn').addEventListener('click',captureFrame); $('#stopScanBtn').addEventListener('click',()=>closeModal('scanModal')); $('#torchBtn').addEventListener('click',toggleTorch);
+    $('#lookupTab').addEventListener('click',()=>displayView('lookup')); $('#vaultTab').addEventListener('click',()=>displayView('vault')); $('#addBlankBtn').addEventListener('click',()=>openSaveForm({quantity:1})); $('#exportBtn').addEventListener('click',exportCsv); $('#saveForm').addEventListener('submit', event=>{ event.preventDefault(); submitSave(); });
+    document.addEventListener('click', event=>{ const close=event.target.closest('[data-close]'); if (close) closeModal(close.dataset.close); const save=event.target.closest('[data-save-result]'); if(save) saveResult(save.dataset.saveResult); const one=event.target.closest('[data-add-one]'); if(one) addOne(one.dataset.addOne); const edit=event.target.closest('[data-edit-part]'); if(edit) { const part=state.inventory.find(item=>item.id===edit.dataset.editPart); if(part) openSaveForm(part); } const del=event.target.closest('[data-delete-part]'); if(del) deletePart(del.dataset.deletePart); });
+    $$('.modal-backdrop').forEach(backdrop=>backdrop.addEventListener('click',event=>{ if(event.target===backdrop) closeModal(backdrop.id); }));
+    renderVault(); checkConnection();
+  </script>
+</body>
+</html>
