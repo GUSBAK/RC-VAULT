@@ -1,8 +1,8 @@
-# RC Vault V14 · Local database, backup and restore
+# RC Vault V15 · GCA neon blue theme and collapsible connections
 
 ## What changed
 
-RC Vault V14 saves your inventory in **IndexedDB**, a local database inside the browser on the device running the app.
+RC Vault V15 saves your inventory in **IndexedDB**, a local database inside the browser on the device running the app.
 
 - Your parts stay on your iPhone, iPad, Mac, or computer.
 - Nothing is uploaded to a cloud database by this feature.
@@ -47,3 +47,10 @@ The lookup service remains unchanged. Keep your valid `SERPAPI_API_KEY` in Verce
 ## Direct backup download
 
 Click **Download JSON**. On macOS, Safari saves the full JSON backup directly in the **Downloads** folder. This version does not open the macOS share sheet, so no Share extension is needed. On iPhone or iPad, the file downloads locally, then can be moved from Downloads to Files.
+
+
+## What changed in V15
+
+- Connection diagnostics are hidden by default in a collapsible panel.
+- New GCA-inspired neon blue accent theme.
+- Download JSON backup button remains direct to Downloads on Mac.

@@ -1,10 +1,10 @@
 {
-  "name": "RC Vault V13",
+  "name": "RC Vault V15",
   "short_name": "RC Vault",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f8f6",
-  "theme_color": "#0b3528",
+  "background_color": "#eef5ff",
+  "theme_color": "#081527",
   "icons": [
     {
       "src": "/icon-192.png",
