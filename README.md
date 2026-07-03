@@ -1,77 +1,59 @@
-# RC Vault V10, Live SKU Lookup Engine
+# RC Vault V11 · reliable online SKU lookup
 
-This is a clean rebuild of the lookup flow.
+## What V11 fixes
 
-## What this version does
+V10 treated the presence of an environment-variable value as a live connection. A missing, expired, copied incorrectly, or over-quota key could therefore show as “connected” while every lookup failed.
 
-1. Scan a barcode using the rear camera. A valid read starts the online lookup immediately.
-2. Type or paste a manufacturer part number, for example `ARA-1606`, `HPI 85615`, or a Traxxas SKU.
-3. The server searches online providers and returns the best product cards inside RC Vault.
-4. Confirm the result, then save it to your personal vault with quantity and storage bin.
+V11 validates the two primary providers before lookup:
 
-The app does not invent a product record. It shows the source and match confidence before you save.
+- **Google via SerpApi**: checks the SerpApi account endpoint. This does not consume a search credit.
+- **Barcode Lookup**: checks the official rate-limit endpoint. This does not consume a product lookup.
+- **Go-UPC**: reports as configured until the first UPC or EAN request, because it does not expose a no-cost account-health endpoint in this package.
 
-## Provider order
+It gives a clear failure reason inside the app, such as `invalid key`, `quota exceeded`, `timeout`, or `not configured`.
 
-1. **Barcode Lookup**, optional. Searches UPC, EAN, GTIN, and MPN.
-2. **Go-UPC**, optional. Adds a barcode-only fallback.
-3. **Google Shopping through SerpApi**, required for strong RC-part coverage.
-4. **FCT Hobby Saudi priority search through Google**, included in the SerpApi route.
-5. A broader Google RC parts search runs only when the first online pass finds no usable match.
+## Important: the 101211 scan
 
-## Required setup for a working online lookup
+`101211` is a **manufacturer part number**, not a UPC or EAN barcode. It is HPI Racing #101211, **Rod End Set**, for the Bullet Series. V11 has an exact HPI official resolver at:
 
-Deploy this folder to Vercel, then add the environment variables in **Project Settings → Environment Variables**.
+`https://www.hpiracing.com/en/part/101211`
 
-Minimum configuration:
+This official HPI resolver runs without any API key for HPI numeric part numbers. The app returns the title, brand, series, fitment, official product link, and availability when HPI returns it.
 
-```text
-SERPAPI_API_KEY=your_key_here
-```
+## Live data sources for all brands
 
-Recommended configuration:
+Set these in Vercel: **Project → Settings → Environment Variables**, then redeploy.
 
 ```text
-SERPAPI_API_KEY=your_key_here
-BARCODELOOKUP_API_KEY=your_key_here
-GOUPC_API_KEY=your_key_here
+SERPAPI_API_KEY=your_real_key
+BARCODELOOKUP_API_KEY=your_real_key
+GOUPC_API_KEY=your_real_key
 ```
 
-`SERPAPI_API_KEY` is the key that makes this an RC-parts lookup engine. It returns Google Shopping cards plus FCT-priority search results. The other two services strengthen exact barcode results.
+Only SerpApi is necessary for a practical first setup. Barcode Lookup and Go-UPC add UPC, EAN, GTIN, and MPN coverage.
 
-Do not place any key in `index.html`. The Vercel API route keeps keys server-side.
+V11 uses the following order:
 
-## Deployment steps
+1. Exact HPI official page for HPI numeric part numbers.
+2. Barcode Lookup for UPC, EAN, GTIN, or MPN.
+3. Go-UPC for UPC and EAN values.
+4. One exact Google search through SerpApi. This avoids using two search credits per scan. It gives FCT Hobby Saudi priority whenever FCT appears in the online results.
+5. Google Shopping only when the exact Google results do not show a useful product match.
 
-1. Unzip the package.
-2. Open Vercel and import the folder or GitHub repository.
-3. Add the environment variables above.
-4. Deploy again.
-5. Open `https://your-project.vercel.app/api/health`.
-6. You should see `"serpApi": true` when the main source is connected.
-7. Open the app from that Vercel link, not by double-clicking `index.html` on your computer.
+## Use the built-in connection test
 
-## Camera workflow
+After deployment, open RC Vault. The yellow or red notice at the top lists each provider and its exact status. Tap **Run connection test** after replacing a key.
 
-- Grant camera permission when asked.
-- Use **Scan barcode**. A successful read vibrates and starts lookup automatically.
-- Use **Capture and read** when a glossy, tiny, or curved label does not scan continuously.
-- Use **Scan photo** for a saved close-up of a barcode.
-- Printed part numbers are text, not barcodes. Enter them in the main lookup field unless you have an OCR provider connected.
+A valid setup will say `ready`, not merely `configured`.
 
-## Important boundaries
+## Deploy
 
-- The app does not scrape FCT Hobby or other retailer websites.
-- Live product data needs a configured provider. Without a provider key, the app shows the configuration message instead of a fake match.
-- Results can still be incomplete. Confirm part number and fitment before saving to inventory.
+1. Extract the zip.
+2. Upload all extracted files to the root of your Vercel project.
+3. Add your environment variables.
+4. Redeploy.
+5. Fully close the installed iPhone web app, then reopen it.
 
-## Local inventory
+## Local data
 
-Your saved parts live in the browser on the device. Use **Export CSV** regularly as a backup. Cloud sync can be added after the lookup engine is proven in real use.
-
-## Smoke tests
-
-```bash
-npm run check
-npm test
-```
+Your saved vault records stay in the browser on that device. Export CSV regularly from **My vault**.

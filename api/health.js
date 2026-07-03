@@ -12,9 +12,10 @@ export default function handler(req, res) {
   return res.status(200).json({
     ok: true,
     providers: {
-      serpApi: Boolean(process.env.SERPAPI_API_KEY),
-      barcodeLookup: Boolean(process.env.BARCODELOOKUP_API_KEY),
-      goUpc: Boolean(process.env.GOUPC_API_KEY)
-    }
+      serpApi: { configured: Boolean(process.env.SERPAPI_API_KEY) },
+      barcodeLookup: { configured: Boolean(process.env.BARCODELOOKUP_API_KEY) },
+      goUpc: { configured: Boolean(process.env.GOUPC_API_KEY) }
+    },
+    note: 'Configured means a key was saved. Use /api/diagnostics to validate provider access.'
   });
 }

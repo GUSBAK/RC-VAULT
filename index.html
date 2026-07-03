@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="favicon-32.png" />
-  <title>RC Vault · Online SKU Lookup</title>
+  <title>RC Vault · Reliable SKU Lookup</title>
   <script src="vendor/zxing-browser.min.js" defer></script>
   <style>
     :root {
@@ -45,6 +45,10 @@
     .notice { display:none; gap:10px; align-items:flex-start; border:1px solid #efd896; border-radius:14px; padding:13px 15px; background:var(--yellow-soft); color:#6c5418; font-size:13px; line-height:1.45; margin-bottom:18px; }
     .notice.show { display:flex; }
     .notice strong { display:block; color:#5b4310; margin-bottom:2px; }
+    .notice .notice-actions { margin-top:8px; }
+    .notice .notice-actions .outline { padding:7px 10px; font-size:12px; color:#5b4310; background:rgba(255,255,255,.62); border-color:#dfc77e; }
+    .notice.error { border-color:#efb9bd; background:#fff1f1; color:#84363e; }
+    .notice.error strong { color:#792e35; }
     .view { display:none; }
     .view.active { display:block; }
     .hero { display:grid; grid-template-columns: minmax(0, 1fr) 330px; gap:20px; margin-bottom:20px; }
@@ -78,6 +82,9 @@
     .status-pill { padding:5px 8px; border-radius:999px; background:#eff4f0; color:#5f6e64; font-size:11px; font-weight:800; }
     .status-pill.ok { background:var(--green-soft); color:var(--green-dark); }
     .status-pill.fail { background:#fff0f0; color:#9a3740; }
+    .status-pill.warn { background:#fff7df; color:#86620f; }
+    .provider-detail { margin:10px 0 0; padding:10px 12px; border:1px solid #f0d4a5; border-radius:12px; background:#fffaf0; color:#725619; font-size:12px; line-height:1.45; }
+    .provider-detail strong { color:#5e4710; }
     .empty { border:1px dashed #b9ccc0; border-radius:16px; padding:30px; color:var(--muted); text-align:center; background:#fbfdfb; line-height:1.5; }
     .loading { display:flex; align-items:center; justify-content:center; gap:10px; padding:35px; color:var(--muted); }
     .spinner { width:18px; height:18px; border-radius:50%; border:2px solid #cfddd4; border-top-color:var(--green); animation:spin .7s linear infinite; }
@@ -98,6 +105,7 @@
     .spec { padding:8px 9px; border:1px solid #e1ece5; border-radius:10px; background:#fcfdfc; min-width:0; }
     .spec label { display:block; margin-bottom:3px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
     .spec strong { display:block; font-size:12px; overflow-wrap:anywhere; }
+    .spec.full { grid-column:1/-1; }
     .description { padding:0 14px 12px; margin:0; font-size:12px; color:#4d5e53; line-height:1.45; }
     .sources { border-top:1px solid #e4ede7; padding:12px 14px; }
     .sources h5 { margin:0 0 7px; font-size:11px; color:var(--muted); letter-spacing:.05em; text-transform:uppercase; }
@@ -270,7 +278,7 @@
       return `<div class="source"><div class="source-left">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>` : `<strong>${name}</strong>`}<div class="source-meta">${meta}</div></div><div class="source-price">${price}</div></div>`;
     }
     function candidateHtml(candidate, index) {
-      const image = safeUrl(candidate.imageUrl); const title = escapeHtml(candidate.title); const code = escapeHtml(codeValue(candidate)); const brand = escapeHtml(candidate.brand || 'Not supplied'); const category = escapeHtml(candidate.category || 'Not supplied');
+      const image = safeUrl(candidate.imageUrl); const title = escapeHtml(candidate.title); const code = escapeHtml(codeValue(candidate)); const brand = escapeHtml(candidate.brand || 'Not supplied'); const category = escapeHtml(candidate.category || 'Not supplied'); const fitment = escapeHtml(candidate.fitment || 'Not supplied');
       const source = candidate.sources?.[0]; const productLink = safeUrl(source?.url);
       const description = escapeHtml(candidate.description || 'No description was supplied by the online result.');
       const badgeClass = candidate.confidence === 'Exact' || candidate.confidence === 'High' ? 'exact' : 'likely';
@@ -279,20 +287,27 @@
         <div class="product-main">${image ? `<img class="product-image" src="${escapeHtml(image)}" alt="" />` : '<div class="product-placeholder">⚙</div>'}
           <div class="product-title"><div class="badges"><span class="badge ${badgeClass}">${escapeHtml(candidate.confidence)} match</span>${candidate.provenance?.map(p => `<span class="badge">${escapeHtml(p)}</span>`).join('') || ''}</div><h4>${title}</h4><p>${brand}</p></div>
         </div>
-        <div class="specs"><div class="spec"><label>Part number</label><strong>${code || 'Not supplied'}</strong></div><div class="spec"><label>Category</label><strong>${category}</strong></div></div>
+        <div class="specs"><div class="spec"><label>Part number</label><strong>${code || 'Not supplied'}</strong></div><div class="spec"><label>Category</label><strong>${category}</strong></div>${candidate.fitment ? `<div class="spec full"><label>Fitment</label><strong>${fitment}</strong></div>` : ''}</div>
         <p class="description">${description}</p>
         <div class="sources"><h5>Online sources</h5>${sources}</div>
         <div class="product-actions"><button class="primary" type="button" data-save-result="${index}">Save to vault</button>${productLink ? `<a class="outline" href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer">Open listing</a>` : ''}</div>
       </article>`;
     }
-    function providerPill(name, status) { const isOk = ['matched','ok'].includes(status); const isFail = status === 'error'; return `<span class="status-pill ${isOk ? 'ok' : isFail ? 'fail' : ''}">${escapeHtml(name)}: ${escapeHtml(status.replace(/_/g,' '))}</span>`; }
-    function renderProviderStatus(status = {}) { $('#providerStatus').innerHTML = Object.entries(status).map(([name, value]) => providerPill(name.replace('serpApi','Google').replace('goUpc','Go-UPC'), value)).join(''); }
+    const PROVIDER_NAMES = { hpiOfficial:'HPI official', barcodeLookup:'Barcode Lookup', goUpc:'Go-UPC', serpApi:'Google' };
+    function providerPill(name, status) { const isOk = ['matched','ok','ready'].includes(status); const isFail = ['error','invalid_key','quota_exceeded','timeout'].includes(status); const isWarn = ['configured','not_configured','not_applicable','no_match'].includes(status); return `<span class="status-pill ${isOk ? 'ok' : isFail ? 'fail' : isWarn ? 'warn' : ''}">${escapeHtml(PROVIDER_NAMES[name] || name)}: ${escapeHtml(String(status || 'unknown').replace(/_/g,' '))}</span>`; }
+    function renderProviderStatus(status = {}) { $('#providerStatus').innerHTML = Object.entries(status).map(([name, value]) => providerPill(name, value)).join(''); }
+    function providerIssueHtml(payload) {
+      const status = payload.providerStatus || {}; const details = payload.providerDetails || {};
+      const lines = Object.entries(details).filter(([name, detail]) => detail && ['error','invalid_key','quota_exceeded','timeout'].includes(status[name])).map(([name, detail]) => `<div><strong>${escapeHtml(PROVIDER_NAMES[name] || name)}:</strong> ${escapeHtml(detail)}</div>`);
+      return lines.length ? `<div class="provider-detail">${lines.join('')}<div class="notice-actions"><button class="outline" type="button" data-run-diagnostics>Run connection test</button></div></div>` : '';
+    }
     function renderResults(payload) {
       state.lastLookup = payload;
       const status = payload.providerStatus || {}; renderProviderStatus(status);
-      if (payload.needsConfiguration) { $('#resultsArea').innerHTML = `<div class="empty"><strong>Live lookup is not connected yet.</strong><br>${escapeHtml(payload.message)}<br><span class="small">Once deployed, add the key in Vercel. The app will then return online results here.</span></div>`; return; }
-      if (!payload.results?.length) { $('#resultsArea').innerHTML = `<div class="empty"><strong>No reliable product match.</strong><br>${escapeHtml(payload.message || '')}<br><span class="small">Use the exact printed manufacturer code, including letters and dashes. Do not save a guess.</span></div>`; return; }
-      $('#resultsArea').innerHTML = `<div class="result-grid">${payload.results.map(candidateHtml).join('')}</div><p class="confidence-note">Online matches can be incomplete. Confirm the part number and fitment before saving. FCT Hobby Saudi is given priority when it appears in the live results.</p>`;
+      const issues = providerIssueHtml(payload);
+      if (payload.needsConfiguration) { $('#resultsArea').innerHTML = `<div class="empty"><strong>Live lookup is not connected yet.</strong><br>${escapeHtml(payload.message)}<br><span class="small">HPI direct matching can still work for HPI part numbers. Add a valid search or barcode key for broader coverage.</span>${issues}</div>`; return; }
+      if (!payload.results?.length) { $('#resultsArea').innerHTML = `<div class="empty"><strong>No reliable product match.</strong><br>${escapeHtml(payload.message || '')}<br><span class="small">Use the exact printed manufacturer code, including letters and dashes. Do not save a guess.</span>${issues}</div>`; return; }
+      $('#resultsArea').innerHTML = `<div class="result-grid">${payload.results.map(candidateHtml).join('')}</div><p class="confidence-note">Online matches can be incomplete. Confirm the part number and fitment before saving. FCT Hobby Saudi is given priority when it appears in the live results.</p>${issues}`;
     }
     function setLoading() { $('#resultsArea').innerHTML = '<div class="loading"><span class="spinner"></span>Checking live product sources…</div>'; $('#providerStatus').innerHTML = ''; }
     function cacheLookup(query, payload) { try { const cache = JSON.parse(localStorage.getItem(LOOKUP_CACHE) || '{}'); cache[query.toLowerCase()] = { savedAt: Date.now(), payload }; localStorage.setItem(LOOKUP_CACHE, JSON.stringify(cache)); } catch {} }
@@ -319,7 +334,7 @@
     function openSaveForm(part = {}) {
       $('#partId').value = part.id || ''; $('#partName').value = part.name || part.title || ''; $('#partBrand').value = part.brand || ''; $('#partNumber').value = part.partNumber || ''; $('#partBarcode').value = part.barcode || ''; $('#partQty').value = part.quantity ?? 1; $('#partBin').value = part.bin || ''; $('#partCategory').value = part.category || ''; $('#partSource').value = part.source || part.sources?.[0]?.supplier || ''; $('#partImage').value = part.imageUrl || ''; $('#partNotes').value = part.notes || part.description || ''; openModal('saveModal'); setTimeout(() => $('#partName').focus(), 100);
     }
-    function saveResult(index) { const candidate = state.lastLookup?.results?.[Number(index)]; if (!candidate) return; openSaveForm({ ...candidate, source: candidate.sources?.[0]?.supplier || candidate.provenance?.[0] || '' }); }
+    function saveResult(index) { const candidate = state.lastLookup?.results?.[Number(index)]; if (!candidate) return; const fitmentNote = candidate.fitment ? `Fitment: ${candidate.fitment}` : ''; openSaveForm({ ...candidate, source: candidate.sources?.[0]?.supplier || candidate.provenance?.[0] || '', notes: [candidate.description, fitmentNote].filter(Boolean).join('\n\n') }); }
     function submitSave() {
       const id = $('#partId').value || uid(); const part = { id, name:text($('#partName').value), brand:text($('#partBrand').value), partNumber:text($('#partNumber').value), barcode:text($('#partBarcode').value), quantity:Math.max(0, Number($('#partQty').value || 0)), bin:text($('#partBin').value), category:text($('#partCategory').value), source:text($('#partSource').value), imageUrl:safeUrl($('#partImage').value), notes:text($('#partNotes').value), updatedAt:new Date().toISOString() };
       if (!part.name) { showToast('Part name is required.'); return; }
@@ -358,12 +373,33 @@
       const url=URL.createObjectURL(file); const image=new Image(); image.onload=async ()=>{ try { const reader=new ZXingBrowser.BrowserMultiFormatReader(); const result=await reader.decodeFromImageElement(image); const value=result?.getText?.() || result?.text || ''; URL.revokeObjectURL(url); if (value) await handleScannedCode(value); else throw new Error('Not found'); } catch { URL.revokeObjectURL(url); $('#scanFeedback').textContent='The photo could not be read. Use a tighter photo with one barcode filling the frame.'; } }; image.onerror=()=>{ URL.revokeObjectURL(url); $('#scanFeedback').textContent='The photo could not be opened.'; }; image.src=url;
     }
     async function toggleTorch() { const track=activeTrack(); if (!track?.applyConstraints) return; try { state.torch=!state.torch; await track.applyConstraints({advanced:[{torch:state.torch}]}); $('#torchBtn').textContent=state.torch?'◉ Light on':'◉ Light'; } catch { $('#scanFeedback').textContent='This camera does not support the light control.'; } }
-    async function checkConnection() { try { const response=await fetch('/api/health',{cache:'no-store'}); const data=await response.json(); if (!data.ok) return; const providers=data.providers||{}; const enabled=Object.values(providers).filter(Boolean).length; if (!enabled) $('#connectionNotice').innerHTML='<div>⚠</div><div><strong>Live lookup needs one key.</strong>Add <code>SERPAPI_API_KEY</code> in Vercel, then redeploy. Without it, the app cannot return online SKU details.</div>'; else $('#connectionNotice').innerHTML=`<div>●</div><div><strong>${enabled} live data ${enabled===1?'source':'sources'} connected.</strong>Barcode databases and Google sources return different coverage. The app combines them and shows the confidence.</div>`; $('#connectionNotice').classList.add('show'); } catch { $('#connectionNotice').innerHTML='<div>⚠</div><div><strong>Run this on Vercel.</strong>The online lookup API is not available when the HTML file is opened directly.</div>'; $('#connectionNotice').classList.add('show'); } }
+    async function checkConnection() {
+      const notice = $('#connectionNotice');
+      notice.classList.remove('error');
+      notice.innerHTML = '<div>◌</div><div><strong>Checking live lookup access.</strong>Validating saved provider keys without using a product lookup.</div>';
+      notice.classList.add('show');
+      try {
+        const response = await fetch('/api/diagnostics', { cache:'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Connection test failed.');
+        const providers = data.providers || {};
+        const values = Object.entries(providers);
+        const ready = values.filter(([, value]) => value?.state === 'ready');
+        const failures = values.filter(([, value]) => ['error','invalid_key','quota_exceeded','timeout'].includes(value?.state));
+        const lines = values.map(([name, value]) => `<div><strong>${escapeHtml(PROVIDER_NAMES[name] || name)}:</strong> ${escapeHtml(value?.detail || String(value?.state || 'unknown').replace(/_/g,' '))}</div>`).join('');
+        const headline = failures.length ? 'A live provider needs attention.' : ready.length ? `${ready.length} live ${ready.length === 1 ? 'source is' : 'sources are'} ready.` : 'No live provider is ready yet.';
+        notice.innerHTML = `<div>${failures.length ? '⚠' : '●'}</div><div><strong>${headline}</strong>${lines}<div class="notice-actions"><button class="outline" type="button" data-run-diagnostics>Run connection test</button></div></div>`;
+        notice.classList.toggle('error', Boolean(failures.length));
+      } catch (error) {
+        notice.classList.add('error');
+        notice.innerHTML = `<div>⚠</div><div><strong>Connection test could not run.</strong>${escapeHtml(error.message || 'Deploy V11 on Vercel, then retry.')}<div class="notice-actions"><button class="outline" type="button" data-run-diagnostics>Retry test</button></div></div>`;
+      }
+    }
     $('#lookupForm').addEventListener('submit', event=>{ event.preventDefault(); runLookup($('#queryInput').value); });
     $('#openScannerBtn').addEventListener('click', startScanner); $('#scanHeroBtn').addEventListener('click', startScanner); $('#scanPhotoBtn').addEventListener('click',()=>$('#photoInput').click()); $('#scanPhotoModalBtn').addEventListener('click',()=>$('#photoInput').click()); $('#photoInput').addEventListener('change', event=>{ scanPhoto(event.target.files?.[0]); event.target.value=''; });
     $('#captureBtn').addEventListener('click',captureFrame); $('#stopScanBtn').addEventListener('click',()=>closeModal('scanModal')); $('#torchBtn').addEventListener('click',toggleTorch);
     $('#lookupTab').addEventListener('click',()=>displayView('lookup')); $('#vaultTab').addEventListener('click',()=>displayView('vault')); $('#addBlankBtn').addEventListener('click',()=>openSaveForm({quantity:1})); $('#exportBtn').addEventListener('click',exportCsv); $('#saveForm').addEventListener('submit', event=>{ event.preventDefault(); submitSave(); });
-    document.addEventListener('click', event=>{ const close=event.target.closest('[data-close]'); if (close) closeModal(close.dataset.close); const save=event.target.closest('[data-save-result]'); if(save) saveResult(save.dataset.saveResult); const one=event.target.closest('[data-add-one]'); if(one) addOne(one.dataset.addOne); const edit=event.target.closest('[data-edit-part]'); if(edit) { const part=state.inventory.find(item=>item.id===edit.dataset.editPart); if(part) openSaveForm(part); } const del=event.target.closest('[data-delete-part]'); if(del) deletePart(del.dataset.deletePart); });
+    document.addEventListener('click', event=>{ const close=event.target.closest('[data-close]'); if (close) closeModal(close.dataset.close); const diagnostics=event.target.closest('[data-run-diagnostics]'); if (diagnostics) checkConnection(); const save=event.target.closest('[data-save-result]'); if(save) saveResult(save.dataset.saveResult); const one=event.target.closest('[data-add-one]'); if(one) addOne(one.dataset.addOne); const edit=event.target.closest('[data-edit-part]'); if(edit) { const part=state.inventory.find(item=>item.id===edit.dataset.editPart); if(part) openSaveForm(part); } const del=event.target.closest('[data-delete-part]'); if(del) deletePart(del.dataset.deletePart); });
     $$('.modal-backdrop').forEach(backdrop=>backdrop.addEventListener('click',event=>{ if(event.target===backdrop) closeModal(backdrop.id); }));
     renderVault(); checkConnection();
   </script>

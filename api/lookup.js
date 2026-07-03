@@ -1,7 +1,7 @@
 const RC_KEYWORDS = [
   ['Traxxas', /\b(traxxas|trx[-\s]?\d+|tra\d+)\b/i],
   ['ARRMA', /\b(arrma|ara[-\s]?\d+|arac\d+)\b/i],
-  ['HPI Racing', /\b(hpi|hpiracing|hpi racing)\b/i],
+  ['HPI Racing', /\b(hpi|hpiracing|hpi racing|bullet series)\b/i],
   ['XRAY', /\b(xray|xray model|team xray|xr[-\s]?\d+)\b/i],
   ['Team Associated', /\b(team associated|associated|asc\d+)\b/i],
   ['Losi', /\b(losi|tlr[-\s]?\d+)\b/i],
@@ -13,7 +13,7 @@ const RC_KEYWORDS = [
 
 const FCT_DOMAIN = 'fcthobby.com';
 const PREFERRED_RETAILERS = [
-  'fcthobby.com',
+  FCT_DOMAIN,
   'amainhobbies.com',
   'horizonhobby.com',
   'rcmart.com',
@@ -39,16 +39,15 @@ function normalized(value = '') {
 function codeTokens(value = '') {
   const clean = text(value).toUpperCase();
   const compact = clean.replace(/[^A-Z0-9]/g, '');
-  return [clean, compact].filter(Boolean);
+  return [...new Set([clean, compact].filter(Boolean))];
 }
 
 function isBarcode(value = '') {
-  return /^\d{8,14}$/.test(text(value));
+  return /^\d{7,14}$/.test(text(value));
 }
 
 function isLikelyCode(value = '') {
-  const clean = text(value);
-  return /^[A-Za-z0-9][A-Za-z0-9._\-/ ]{1,63}$/.test(clean);
+  return /^[A-Za-z0-9][A-Za-z0-9._\-/ ]{1,63}$/.test(text(value));
 }
 
 function safeUrl(value = '') {
@@ -71,6 +70,8 @@ function host(value = '') {
 function sourceLabel(value = '') {
   const h = host(value);
   if (h === FCT_DOMAIN || h.endsWith(`.${FCT_DOMAIN}`)) return 'FCT Hobby Saudi';
+  if (h === 'hpiracing.com' || h.endsWith('.hpiracing.com')) return 'HPI Racing official';
+  if (h === 'arrma-rc.com' || h.endsWith('.arrma-rc.com')) return 'ARRMA official';
   if (!h) return '';
   return h.split('.')[0].replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -83,7 +84,7 @@ function detectBrand(...values) {
 
 function inferCategory(name = '') {
   const v = text(name).toLowerCase();
-  if (/shock|spring|arm|suspension|hub|c-hub|knuckle|link set/.test(v)) return 'Suspension';
+  if (/shock|spring|arm|suspension|hub|c-hub|knuckle|link set|rod end/.test(v)) return 'Suspension';
   if (/diff|gear|drive|shaft|slipper|pinion|spur|bearing/.test(v)) return 'Drivetrain';
   if (/servo|steer|bellcrank/.test(v)) return 'Steering';
   if (/wheel|tire|tyre|hex hub/.test(v)) return 'Wheels & tyres';
@@ -97,9 +98,70 @@ function titleWithoutRetailer(value = '') {
   return text(value).replace(/\s+[|–—-]\s+(FCTHOBBY|FCT Hobby|AMain Hobbies|Horizon Hobby|RCMart|Tower Hobbies|MCM Racing|MK Racing|Campbelltown Hobbies).*$/i, '').trim();
 }
 
+function decodeHtml(value = '') {
+  return text(value)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#039;|&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function stripHtml(value = '') {
+  return decodeHtml(String(value ?? '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' '));
+}
+
+function htmlMeta(html = '', key = '') {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']*)["'][^>]*>`, 'i'),
+    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${escaped}["'][^>]*>`, 'i')
+  ];
+  for (const pattern of patterns) {
+    const match = String(html).match(pattern);
+    if (match?.[1]) return decodeHtml(match[1]);
+  }
+  return '';
+}
+
+function htmlHeading(html = '', tag = 'h1') {
+  const match = String(html).match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match ? stripHtml(match[1]) : '';
+}
+
+function firstListAfter(html = '', headingPattern = /This Part Fits/i, limit = 8) {
+  const source = String(html);
+  const heading = source.search(headingPattern);
+  if (heading < 0) return [];
+  const window = source.slice(heading, heading + 16000);
+  const listMatch = window.match(/<ul[^>]*>([\s\S]*?)<\/ul>/i);
+  if (!listMatch) return [];
+  return [...listMatch[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+    .map(match => stripHtml(match[1]))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function hpiCode(query = '') {
+  const value = text(query).toUpperCase().replace(/^HPI[-\s]?/i, '').replace(/[^A-Z0-9]/g, '');
+  return /^\d{4,8}$/.test(value) ? value : '';
+}
+
+function extractAvailability(html = '') {
+  const source = stripHtml(html);
+  if (/\bIn stock\b/i.test(source)) return 'In stock';
+  if (/\bOut of stock\b/i.test(source)) return 'Out of stock';
+  return '';
+}
+
 function matchQuality(candidate, query) {
   const qTokens = codeTokens(query).map(normalized);
-  const fields = [candidate.barcode, candidate.partNumber, candidate.sku, candidate.title, candidate.description]
+  const fields = [candidate.barcode, candidate.partNumber, candidate.sku, candidate.title, candidate.description, candidate.fitment]
     .map(value => normalized(value));
   const exact = qTokens.some(token => token && fields.some(field => field === token));
   const contains = qTokens.some(token => token && fields.some(field => field.includes(token)));
@@ -109,12 +171,14 @@ function matchQuality(candidate, query) {
 function scoreCandidate(candidate, query) {
   const { exact, contains } = matchQuality(candidate, query);
   let score = 0;
+  if (candidate.provenance?.includes('HPI official')) score += 93;
   if (candidate.provenance?.includes('Barcode Lookup') || candidate.provenance?.includes('Go-UPC')) score += 90;
   if (exact) score += 75;
   else if (contains) score += 42;
   if (candidate.brand) score += 5;
   if (candidate.imageUrl) score += 4;
   if (candidate.description) score += 3;
+  if (candidate.fitment) score += 4;
   if (candidate.sources?.some(s => s.supplier === 'FCT Hobby Saudi')) score += 7;
   if (candidate.sources?.some(s => s.url && PREFERRED_RETAILERS.some(domain => host(s.url).endsWith(domain)))) score += 4;
   if (candidate.sources?.some(s => s.price !== '')) score += 2;
@@ -136,13 +200,14 @@ function sanitizeCandidate(raw = {}) {
     barcode: text(raw.barcode || raw.gtin || raw.ean || raw.upc || raw.barcodeNumber),
     sku: text(raw.sku),
     description: text(raw.description || raw.snippet),
+    fitment: text(raw.fitment),
     category: text(raw.category),
     imageUrl: safeUrl(raw.imageUrl || raw.image || raw.thumbnail || raw.image_url),
     sources: Array.isArray(raw.sources) ? raw.sources : [],
     provenance: Array.isArray(raw.provenance) ? raw.provenance : []
   };
   candidate.title = titleWithoutRetailer(candidate.title) || candidate.partNumber || candidate.barcode || 'RC part';
-  candidate.brand ||= detectBrand(candidate.title, candidate.description, candidate.partNumber);
+  candidate.brand ||= detectBrand(candidate.title, candidate.description, candidate.partNumber, candidate.fitment);
   candidate.category ||= inferCategory(candidate.title);
   candidate.sources = candidate.sources
     .map(source => ({
@@ -197,13 +262,45 @@ function candidateFromGoUpc(payload, query) {
   });
 }
 
+function queryInText(query, ...values) {
+  const token = normalized(query);
+  if (!token) return false;
+  return values.some(value => normalized(value).includes(token));
+}
+
+function candidateFromOrganic(item, query) {
+  const url = safeUrl(item?.link || item?.url || '');
+  const title = text(item?.title);
+  const snippet = text(item?.snippet);
+  const exactCode = queryInText(query, title, snippet) ? query : '';
+  return sanitizeCandidate({
+    title,
+    brand: detectBrand(title, snippet, query),
+    partNumber: !isBarcode(query) ? exactCode : '',
+    barcode: isBarcode(query) ? exactCode : '',
+    description: snippet,
+    imageUrl: item?.thumbnail || item?.favicon,
+    sources: [{
+      supplier: sourceLabel(url),
+      url,
+      price: '',
+      currency: '',
+      availability: '',
+      sourceType: 'Google exact search'
+    }],
+    provenance: ['Google Search']
+  });
+}
+
 function candidateFromShopping(item, query) {
   const url = safeUrl(item?.link || item?.product_link || item?.productLink || '');
+  const title = text(item?.title);
+  const exactCode = queryInText(query, title, item?.snippet) ? query : '';
   return sanitizeCandidate({
-    title: item?.title,
-    brand: detectBrand(item?.title, query),
-    partNumber: !isBarcode(query) && normalized(item?.title).includes(normalized(query)) ? query : '',
-    barcode: isBarcode(query) && normalized(item?.title).includes(normalized(query)) ? query : '',
+    title,
+    brand: detectBrand(title, query),
+    partNumber: !isBarcode(query) ? exactCode : '',
+    barcode: isBarcode(query) ? exactCode : '',
     description: item?.snippet || item?.extensions?.join(', ') || '',
     imageUrl: item?.thumbnail || item?.serpapi_thumbnail || item?.image,
     sources: [{
@@ -215,27 +312,6 @@ function candidateFromShopping(item, query) {
       sourceType: 'Google Shopping'
     }],
     provenance: ['Google Shopping']
-  });
-}
-
-function candidateFromOrganic(item, query) {
-  const url = safeUrl(item?.link || item?.url || '');
-  return sanitizeCandidate({
-    title: item?.title,
-    brand: detectBrand(item?.title, item?.snippet, query),
-    partNumber: !isBarcode(query) && normalized(`${item?.title || ''} ${item?.snippet || ''}`).includes(normalized(query)) ? query : '',
-    barcode: isBarcode(query) && normalized(`${item?.title || ''} ${item?.snippet || ''}`).includes(normalized(query)) ? query : '',
-    description: item?.snippet,
-    imageUrl: item?.thumbnail || item?.favicon,
-    sources: [{
-      supplier: sourceLabel(url),
-      url,
-      price: '',
-      currency: '',
-      availability: '',
-      sourceType: 'Google Search'
-    }],
-    provenance: ['Google Search']
   });
 }
 
@@ -252,6 +328,7 @@ function mergeCandidates(items, query) {
       continue;
     }
     if (!existing.description && candidate.description) existing.description = candidate.description;
+    if (!existing.fitment && candidate.fitment) existing.fitment = candidate.fitment;
     if (!existing.imageUrl && candidate.imageUrl) existing.imageUrl = candidate.imageUrl;
     if (!existing.brand && candidate.brand) existing.brand = candidate.brand;
     if (!existing.partNumber && candidate.partNumber) existing.partNumber = candidate.partNumber;
@@ -275,6 +352,16 @@ function configuredProviders() {
   };
 }
 
+function providerError(error, fallback = 'Provider request failed.') {
+  const status = Number(error?.status || 0);
+  const raw = text(error?.message || fallback);
+  if (error?.name === 'AbortError') return { state: 'timeout', detail: 'Timed out. Try again.' };
+  if ([401, 403].includes(status)) return { state: 'invalid_key', detail: 'API key rejected. Replace it in Vercel, then redeploy.' };
+  if (status === 429) return { state: 'quota_exceeded', detail: 'Request limit reached. Check the provider plan or wait, then retry.' };
+  if (status === 404) return { state: 'no_match', detail: 'No record found.' };
+  return { state: 'error', detail: raw.slice(0, 140) || fallback };
+}
+
 async function fetchJson(url, timeoutMs = 8500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -285,7 +372,7 @@ async function fetchJson(url, timeoutMs = 8500) {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(body?.message || body?.error?.message || `HTTP ${response.status}`);
+      const error = new Error(body?.message || body?.error?.message || body?.error || `HTTP ${response.status}`);
       error.status = response.status;
       throw error;
     }
@@ -295,9 +382,71 @@ async function fetchJson(url, timeoutMs = 8500) {
   }
 }
 
+async function fetchHtml(url, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': 'RC-Vault/11.0 exact part lookup'
+      },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    const body = await response.text().catch(() => '');
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return { html: body, url: response.url || url };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function lookupHpiOfficial(query) {
+  const code = hpiCode(query);
+  if (!code) return { state: 'not_applicable', candidates: [], detail: '' };
+  const url = `https://www.hpiracing.com/en/part/${encodeURIComponent(code)}`;
+  try {
+    const { html, url: finalUrl } = await fetchHtml(url);
+    const h1 = htmlHeading(html, 'h1');
+    const exactMarker = new RegExp(`#?\\s*${code}\\b`, 'i');
+    if (!h1 || !exactMarker.test(h1)) return { state: 'no_match', candidates: [], detail: '' };
+    const h2 = htmlHeading(html, 'h2');
+    const title = h1.replace(new RegExp(`#?\\s*${code}\\s*[-–—]?\\s*`, 'i'), '').trim();
+    const fitment = firstListAfter(html).join(' · ');
+    const description = [h2, htmlMeta(html, 'og:description') || htmlMeta(html, 'description')].filter(Boolean).join('. ');
+    const imageUrl = htmlMeta(html, 'og:image');
+    const availability = extractAvailability(html);
+    const candidate = sanitizeCandidate({
+      title,
+      brand: 'HPI Racing',
+      partNumber: code,
+      description: description || 'Genuine HPI Racing spare part.',
+      fitment,
+      imageUrl,
+      sources: [{
+        supplier: 'HPI Racing official',
+        url: finalUrl,
+        availability,
+        sourceType: 'Official manufacturer'
+      }],
+      provenance: ['HPI official']
+    });
+    return { state: 'matched', candidates: [candidate], detail: 'Exact official HPI part page.' };
+  } catch (error) {
+    if (Number(error?.status) === 404) return { state: 'no_match', candidates: [], detail: '' };
+    const mapped = providerError(error, 'Could not reach the HPI official part page.');
+    return { ...mapped, candidates: [] };
+  }
+}
+
 async function lookupBarcodeLookup(query) {
   const key = process.env.BARCODELOOKUP_API_KEY;
-  if (!key) return { state: 'not_configured', candidates: [] };
+  if (!key) return { state: 'not_configured', candidates: [], detail: 'No key saved.' };
   const params = new URLSearchParams({ key, formatted: 'y' });
   if (isBarcode(query)) params.set('barcode', query);
   else params.set('mpn', query);
@@ -306,32 +455,33 @@ async function lookupBarcodeLookup(query) {
     const products = Array.isArray(payload?.products) ? payload.products : [];
     return {
       state: products.length ? 'matched' : 'no_match',
-      candidates: products.slice(0, 4).map(product => candidateFromBarcodeLookup(product, query))
+      candidates: products.slice(0, 4).map(product => candidateFromBarcodeLookup(product, query)),
+      detail: products.length ? '' : 'No result in Barcode Lookup.'
     };
   } catch (error) {
-    if (error?.status === 404) return { state: 'no_match', candidates: [] };
-    throw error;
+    const mapped = providerError(error, 'Barcode Lookup did not respond.');
+    return { ...mapped, candidates: [] };
   }
 }
 
 async function lookupGoUpc(query) {
   const key = process.env.GOUPC_API_KEY;
-  if (!key) return { state: 'not_configured', candidates: [] };
-  if (!isBarcode(query)) return { state: 'not_applicable', candidates: [] };
+  if (!key) return { state: 'not_configured', candidates: [], detail: 'No key saved.' };
+  if (!isBarcode(query)) return { state: 'not_applicable', candidates: [], detail: 'Part number, not UPC/EAN/GTIN.' };
   try {
     const payload = await fetchJson(`https://go-upc.com/api/v1/code/${encodeURIComponent(query)}?key=${encodeURIComponent(key)}`);
     const candidate = candidateFromGoUpc(payload, query);
     const valid = candidate.title && candidate.title !== 'RC part';
-    return { state: valid ? 'matched' : 'no_match', candidates: valid ? [candidate] : [] };
+    return { state: valid ? 'matched' : 'no_match', candidates: valid ? [candidate] : [], detail: valid ? '' : 'No result in Go-UPC.' };
   } catch (error) {
-    if (error?.status === 404) return { state: 'no_match', candidates: [] };
-    throw error;
+    const mapped = providerError(error, 'Go-UPC did not respond.');
+    return { ...mapped, candidates: [] };
   }
 }
 
 async function serpSearch(params) {
   const key = process.env.SERPAPI_API_KEY;
-  if (!key) return { state: 'not_configured', payload: null };
+  if (!key) return { state: 'not_configured', payload: null, detail: 'No key saved.' };
   const qp = new URLSearchParams({
     api_key: key,
     hl: 'en',
@@ -339,44 +489,45 @@ async function serpSearch(params) {
     google_domain: 'google.com',
     ...params
   });
-  const payload = await fetchJson(`https://serpapi.com/search.json?${qp.toString()}`, 10000);
-  if (payload?.error) throw new Error(payload.error);
-  return { state: 'ok', payload };
+  try {
+    const payload = await fetchJson(`https://serpapi.com/search.json?${qp.toString()}`, 11000);
+    if (payload?.error) throw new Error(payload.error);
+    if (payload?.search_metadata?.status === 'Error') throw new Error(payload?.error || 'Search engine returned an error.');
+    return { state: 'ok', payload, detail: '' };
+  } catch (error) {
+    return { ...providerError(error, 'Google search did not respond.'), payload: null };
+  }
 }
 
 async function lookupSerpApi(query) {
-  const key = process.env.SERPAPI_API_KEY;
-  if (!key) return { state: 'not_configured', candidates: [] };
-  const cleanQuery = text(query).replace(/"/g, '');
-  const [shoppingResult, fctResult] = await Promise.allSettled([
-    serpSearch({ engine: 'google_shopping', q: cleanQuery, device: 'mobile' }),
-    serpSearch({ engine: 'google', q: `site:fcthobby.com/en "${cleanQuery}"`, num: '8' })
-  ]);
+  if (!process.env.SERPAPI_API_KEY) return { state: 'not_configured', candidates: [], detail: 'No key saved.' };
+  const cleanQuery = text(query).replace(/["<>]/g, '');
+  const exactSearch = await serpSearch({
+    engine: 'google',
+    q: `"${cleanQuery}" RC`,
+    num: '10',
+    location: 'Jeddah, Saudi Arabia'
+  });
+  if (exactSearch.state !== 'ok') return { state: exactSearch.state, candidates: [], detail: exactSearch.detail };
+  const rows = (exactSearch.payload?.organic_results || []).slice(0, 10);
+  const candidates = rows.map(item => candidateFromOrganic(item, query));
+  const hasExact = candidates.some(candidate => matchQuality(candidate, query).exact);
+  if (hasExact) return { state: 'matched', candidates, detail: '' };
 
-  const shoppingPayload = shoppingResult.status === 'fulfilled' ? shoppingResult.value.payload : null;
-  const fctPayload = fctResult.status === 'fulfilled' ? fctResult.value.payload : null;
-  const shoppingRows = [
-    ...(shoppingPayload?.shopping_results || []),
-    ...(shoppingPayload?.inline_shopping_results || [])
-  ].slice(0, 8);
-  const fctRows = (fctPayload?.organic_results || []).slice(0, 6);
-  let candidates = [
-    ...shoppingRows.map(item => candidateFromShopping(item, query)),
-    ...fctRows.map(item => candidateFromOrganic(item, query))
-  ];
-
-  // Use one broader search only when the targeted sources returned nothing useful.
-  const hasLikelyMatch = candidates.some(candidate => matchQuality(candidate, query).contains);
-  if (!hasLikelyMatch) {
-    const general = await serpSearch({ engine: 'google', q: `"${cleanQuery}" RC part`, num: '8' });
-    const rows = (general.payload?.organic_results || []).slice(0, 8);
-    candidates.push(...rows.map(item => candidateFromOrganic(item, query)));
-  }
-
+  const shoppingSearch = await serpSearch({
+    engine: 'google_shopping',
+    q: `${cleanQuery} RC part`,
+    device: 'desktop',
+    location: 'Jeddah, Saudi Arabia'
+  });
+  const shoppingRows = shoppingSearch.state === 'ok'
+    ? [...(shoppingSearch.payload?.shopping_results || []), ...(shoppingSearch.payload?.inline_shopping_results || [])].slice(0, 8)
+    : [];
+  const additional = shoppingRows.map(item => candidateFromShopping(item, query));
   return {
-    state: candidates.length ? 'matched' : 'no_match',
-    candidates,
-    note: candidates.length ? '' : 'Google and Google Shopping did not return a usable match.'
+    state: candidates.length || additional.length ? 'matched' : (shoppingSearch.state === 'ok' ? 'no_match' : shoppingSearch.state),
+    candidates: [...candidates, ...additional],
+    detail: shoppingSearch.state === 'ok' ? '' : shoppingSearch.detail
   };
 }
 
@@ -394,63 +545,46 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return httpError(res, 405, 'Use GET.');
   const raw = Array.isArray(req.query?.q) ? req.query.q[0] : req.query?.q;
   const query = text(raw).slice(0, 64);
-  if (!isLikelyCode(query)) {
-    return httpError(res, 400, 'Enter a barcode or manufacturer part number with at least 2 characters.');
-  }
-
-  const providers = configuredProviders();
-  if (!providers.serpApi && !providers.barcodeLookup && !providers.goUpc) {
-    responseHeaders(res);
-    return res.status(200).json({
-      ok: true,
-      query,
-      kind: isBarcode(query) ? 'barcode' : 'part_number',
-      results: [],
-      providerStatus: {
-        serpApi: 'not_configured',
-        barcodeLookup: 'not_configured',
-        goUpc: 'not_configured'
-      },
-      needsConfiguration: true,
-      message: 'No online data provider is connected. Add SERPAPI_API_KEY in Vercel to start live RC part lookup.'
-    });
-  }
+  if (!isLikelyCode(query)) return httpError(res, 400, 'Enter a barcode or manufacturer part number with at least 2 characters.');
 
   const tasks = [
+    ['hpiOfficial', lookupHpiOfficial(query)],
     ['barcodeLookup', lookupBarcodeLookup(query)],
     ['goUpc', lookupGoUpc(query)],
     ['serpApi', lookupSerpApi(query)]
   ];
   const settled = await Promise.allSettled(tasks.map(([, task]) => task));
-  const statuses = {};
-  const warnings = [];
+  const providerStatus = {};
+  const providerDetails = {};
   const candidates = [];
 
   settled.forEach((result, index) => {
     const name = tasks[index][0];
     if (result.status === 'fulfilled') {
-      statuses[name] = result.value.state;
+      providerStatus[name] = result.value.state;
+      providerDetails[name] = text(result.value.detail);
       candidates.push(...(result.value.candidates || []));
-      if (result.value.note) warnings.push(result.value.note);
     } else {
-      statuses[name] = 'error';
-      warnings.push(`${name} did not respond. Try again.`);
+      providerStatus[name] = 'error';
+      providerDetails[name] = 'Unexpected lookup error. Open diagnostics to identify the provider.';
     }
   });
 
   const results = mergeCandidates(candidates, query);
+  const anyConfigured = Object.values(configuredProviders()).some(Boolean);
   responseHeaders(res);
   return res.status(200).json({
     ok: true,
     query,
     kind: isBarcode(query) ? 'barcode' : 'part_number',
     results,
-    providerStatus: statuses,
-    needsConfiguration: false,
+    providerStatus,
+    providerDetails,
+    needsConfiguration: !anyConfigured && providerStatus.hpiOfficial !== 'matched',
     message: results.length
-      ? `Found ${results.length} online ${results.length === 1 ? 'match' : 'matches'}. Confirm the correct RC part before saving.`
-      : 'No reliable match found. Try the printed manufacturer part number, usually shown beside the barcode.',
-    warnings
+      ? `Found ${results.length} online ${results.length === 1 ? 'match' : 'matches'}. Confirm the part and fitment before saving.`
+      : 'No reliable match found. Open diagnostics to see which provider needs attention, then try the printed manufacturer part number.',
+    warnings: Object.entries(providerDetails).filter(([, value]) => value).map(([name, value]) => `${name}: ${value}`)
   });
 }
 
@@ -458,10 +592,13 @@ export const __test__ = {
   normalized,
   isBarcode,
   detectBrand,
-  candidateFromShopping,
   candidateFromOrganic,
+  candidateFromShopping,
   candidateFromBarcodeLookup,
   mergeCandidates,
   scoreCandidate,
-  confidence
+  confidence,
+  hpiCode,
+  stripHtml,
+  firstListAfter
 };

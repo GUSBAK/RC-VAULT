@@ -35,3 +35,12 @@ assert.equal(merged[0].brand, 'ARRMA');
 assert.ok(['High','Exact'].includes(merged[0].confidence));
 
 console.log('lookup mapper tests passed');
+
+assert.equal(__test__.hpiCode('HPI-101211'), '101211');
+assert.equal(__test__.hpiCode('101211'), '101211');
+const hpiFixture = `
+  <h3>This Part Fits the following kits / parts:</h3>
+  <ul><li>Bullet ST 3.0 STD</li><li>Bullet MT 3.0 STD</li></ul>`;
+assert.deepEqual(__test__.firstListAfter(hpiFixture), ['Bullet ST 3.0 STD', 'Bullet MT 3.0 STD']);
+
+console.log('HPI resolver utility tests passed');

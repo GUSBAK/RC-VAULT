@@ -1,7 +1,6 @@
 {
   "functions": {
-    "api/lookup.js": {
-      "maxDuration": 25
-    }
+    "api/lookup.js": { "maxDuration": 25 },
+    "api/diagnostics.js": { "maxDuration": 20 }
   }
 }
