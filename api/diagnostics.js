@@ -72,7 +72,7 @@ export default async function handler(req, res) {
   }
   const [serpApi, barcodeLookup] = await Promise.all([checkSerpApi(), checkBarcodeLookup()]);
   const providers = {
-    hpiOfficial: { state: 'available', detail: 'Built-in direct lookup for HPI part numbers.' },
+    hpiOfficial: { state: 'available', detail: 'Built-in direct lookup for HPI spare parts and complete HPI kits, including pasted HPI links.' },
     xrayOfficial: { state: 'available', detail: 'Built-in brand-scoped lookup. Select XRAY before checking a numeric part code.' },
     serpApi,
     barcodeLookup,

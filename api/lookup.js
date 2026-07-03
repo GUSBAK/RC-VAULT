@@ -183,9 +183,24 @@ function firstListAfter(html = '', headingPattern = /This Part Fits/i, limit = 8
     .slice(0, limit);
 }
 
+function hpiReference(query = '') {
+  const raw = text(query);
+  const url = safeUrl(raw);
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      const validHost = /(^|\.)hpiracing\.com$/i.test(parsed.hostname);
+      const match = parsed.pathname.match(/\/(?:[a-z]{2}\/)?(kit|part)\/(\d{4,8})(?:\/|$)/i);
+      if (validHost && match) return { code: match[2], route: match[1].toLowerCase(), url: parsed.toString() };
+    } catch {}
+    return { code: '', route: '', url: '' };
+  }
+  const value = raw.toUpperCase().replace(/^HPI[-\s]?/i, '').replace(/[^A-Z0-9]/g, '');
+  return /^\d{4,8}$/.test(value) ? { code: value, route: '', url: '' } : { code: '', route: '', url: '' };
+}
+
 function hpiCode(query = '') {
-  const value = text(query).toUpperCase().replace(/^HPI[-\s]?/i, '').replace(/[^A-Z0-9]/g, '');
-  return /^\d{4,8}$/.test(value) ? value : '';
+  return hpiReference(query).code;
 }
 
 function xrayCode(query = '') {
@@ -237,8 +252,10 @@ function confidence(score) {
 
 function sanitizeCandidate(raw = {}, scopedBrand = 'Auto') {
   const candidate = {
+    itemType: text(raw.itemType || raw.type || 'part').toLowerCase() === 'rc-car' ? 'rc-car' : 'part',
     title: text(raw.title || raw.name || raw.productName),
     brand: text(raw.brand || raw.manufacturer),
+    carName: text(raw.carName || raw.platform || raw.modelName),
     partNumber: text(raw.partNumber || raw.mpn || raw.model || raw.manufacturerPartNumber),
     barcode: text(raw.barcode || raw.gtin || raw.ean || raw.upc || raw.barcodeNumber),
     sku: text(raw.sku),
@@ -251,7 +268,8 @@ function sanitizeCandidate(raw = {}, scopedBrand = 'Auto') {
   };
   candidate.title = titleWithoutRetailer(candidate.title) || candidate.partNumber || candidate.barcode || 'RC part';
   candidate.brand ||= scopedBrand !== 'Auto' && scopedBrand !== 'Other' ? scopedBrand : detectBrand(candidate.title, candidate.description, candidate.partNumber, candidate.fitment);
-  candidate.category ||= inferCategory(candidate.title);
+  candidate.category ||= candidate.itemType === 'rc-car' ? 'RC Car' : inferCategory(candidate.title);
+  if (candidate.itemType === 'rc-car' && !candidate.carName) candidate.carName = candidate.title;
   candidate.sources = candidate.sources
     .map(source => ({
       supplier: text(source.supplier) || sourceLabel(source.url) || 'Online source',
@@ -450,41 +468,89 @@ async function fetchHtml(url, timeoutMs = 9000) {
 
 async function lookupHpiOfficial(query, scopedBrand = 'Auto') {
   if (!['Auto', 'HPI Racing', 'Other'].includes(scopedBrand)) return { state: 'not_applicable', candidates: [], detail: '' };
-  const code = hpiCode(query);
+  const reference = hpiReference(query);
+  const code = reference.code;
   if (!code) return { state: 'not_applicable', candidates: [], detail: '' };
-  const url = `https://www.hpiracing.com/en/part/${encodeURIComponent(code)}`;
-  try {
-    const { html, url: finalUrl } = await fetchHtml(url);
-    const h1 = htmlHeading(html, 'h1');
-    const exactMarker = new RegExp(`#?\\s*${code}\\b`, 'i');
-    if (!h1 || !exactMarker.test(h1)) return { state: 'no_match', candidates: [], detail: '' };
-    const h2 = htmlHeading(html, 'h2');
-    const title = h1.replace(new RegExp(`#?\\s*${code}\\s*[-–—]?\\s*`, 'i'), '').trim();
-    const fitment = firstListAfter(html).join(' · ');
-    const description = [h2, htmlMeta(html, 'og:description') || htmlMeta(html, 'description')].filter(Boolean).join('. ');
-    const imageUrl = htmlMeta(html, 'og:image');
-    const availability = extractAvailability(html);
-    const candidate = sanitizeCandidate({
-      title,
-      brand: 'HPI Racing',
-      partNumber: code,
-      description: description || 'Genuine HPI Racing spare part.',
-      fitment,
-      imageUrl,
-      sources: [{
-        supplier: 'HPI Racing official',
-        url: finalUrl,
-        availability,
-        sourceType: 'Official manufacturer'
-      }],
-      provenance: ['HPI official']
-    }, scopedBrand);
-    return { state: 'matched', candidates: [candidate], detail: 'Exact official HPI part page.' };
-  } catch (error) {
-    if (Number(error?.status) === 404) return { state: 'no_match', candidates: [], detail: '' };
-    const mapped = providerError(error, 'Could not reach the HPI official part page.');
-    return { ...mapped, candidates: [] };
+
+  const routes = reference.route ? [reference.route] : ['kit', 'part'];
+  const candidates = [];
+  const failures = [];
+
+  for (const route of routes) {
+    const url = reference.url && reference.route === route
+      ? reference.url
+      : `https://www.hpiracing.com/en/${route}/${encodeURIComponent(code)}`;
+    try {
+      const { html, url: finalUrl } = await fetchHtml(url);
+      const plain = stripHtml(html);
+      const exactMarker = new RegExp(`#?\\s*${code}\\b`, 'i');
+      if (!exactMarker.test(plain)) continue;
+
+      const imageUrl = htmlMeta(html, 'og:image');
+      const availability = extractAvailability(html);
+      const descriptionMeta = htmlMeta(html, 'og:description') || htmlMeta(html, 'description');
+      const pageHeading = htmlHeading(html, 'h1');
+
+      if (route === 'kit') {
+        const marker = new RegExp(`#\\s*${code}\\s*`, 'i');
+        const index = plain.search(marker);
+        const after = index >= 0 ? plain.slice(index).replace(marker, '') : '';
+        const title = text(after.split(/\b(?:1\s*\/\s*\d+(?:st|nd|rd|th)?|scale|specifications:|length:|what you need:|features:)\b/i)[0]) || pageHeading;
+        if (!title) continue;
+        const drivePower = after.match(/\b(1\s*\/\s*\d+(?:st|nd|rd|th)?\s+[^.]{0,90})/i)?.[1] || '';
+        const description = [descriptionMeta, pageHeading && pageHeading !== title ? pageHeading : '', drivePower].filter(Boolean).join(' ');
+        candidates.push(sanitizeCandidate({
+          itemType: 'rc-car',
+          title,
+          carName: title,
+          brand: 'HPI Racing',
+          partNumber: code,
+          category: 'RC Car',
+          description: description || 'Genuine HPI Racing kit.',
+          fitment: 'Complete HPI Racing kit',
+          imageUrl,
+          sources: [{
+            supplier: 'HPI Racing official',
+            url: finalUrl,
+            availability,
+            sourceType: 'Official manufacturer'
+          }],
+          provenance: ['HPI official']
+        }, scopedBrand));
+      } else {
+        const heading = htmlHeading(html, 'h1');
+        const title = heading.replace(new RegExp(`#?\\s*${code}\\s*[-–—]?\\s*`, 'i'), '').trim();
+        if (!title || !exactMarker.test(heading)) continue;
+        const fitment = firstListAfter(html).join(' · ');
+        const description = [htmlHeading(html, 'h2'), descriptionMeta].filter(Boolean).join('. ');
+        candidates.push(sanitizeCandidate({
+          itemType: 'part',
+          title,
+          brand: 'HPI Racing',
+          partNumber: code,
+          description: description || 'Genuine HPI Racing spare part.',
+          fitment,
+          imageUrl,
+          sources: [{
+            supplier: 'HPI Racing official',
+            url: finalUrl,
+            availability,
+            sourceType: 'Official manufacturer'
+          }],
+          provenance: ['HPI official']
+        }, scopedBrand));
+      }
+    } catch (error) {
+      if (Number(error?.status) !== 404) failures.push(providerError(error, `Could not reach the HPI official ${route} page.`));
+    }
   }
+
+  if (candidates.length) {
+    const hasKit = candidates.some(candidate => candidate.itemType === 'rc-car');
+    return { state: 'matched', candidates, detail: hasKit ? 'Exact official HPI kit page.' : 'Exact official HPI part page.' };
+  }
+  const seriousFailure = failures.find(item => ['timeout', 'error'].includes(item.state));
+  return seriousFailure ? { ...seriousFailure, candidates: [] } : { state: 'no_match', candidates: [], detail: '' };
 }
 
 function xrayListingCandidate(html, finalUrl, code) {
@@ -633,7 +699,11 @@ function fallbackLinks(query, scopedBrand) {
   const search = encodeURIComponent(`${query} ${scopedBrand !== 'Auto' && scopedBrand !== 'Other' ? scopedBrand : 'RC part'}`);
   const links = [{ label: 'Search Google', url: `https://www.google.com/search?q=${search}` }];
   if (scopedBrand === 'XRAY') links.unshift({ label: 'Search XRAY official', url: `https://www.google.com/search?q=${encodeURIComponent(`site:teamxray.com ${query} XRAY`)}` });
-  if (scopedBrand === 'HPI Racing') links.unshift({ label: 'Open HPI official', url: `https://www.hpiracing.com/en/part/${encodeURIComponent(hpiCode(query) || query)}` });
+  if (scopedBrand === 'HPI Racing') {
+    const reference = hpiReference(query);
+    const route = reference.route || 'kit';
+    links.unshift({ label: reference.route === 'part' ? 'Open HPI part page' : 'Open HPI kit page', url: reference.url || `https://www.hpiracing.com/en/${route}/${encodeURIComponent(reference.code || query)}` });
+  }
   if (scopedBrand === 'Traxxas') links.unshift({ label: 'Search Traxxas official', url: `https://www.google.com/search?q=${encodeURIComponent(`site:traxxas.com ${query} Traxxas`)}` });
   if (scopedBrand === 'ARRMA') links.unshift({ label: 'Search ARRMA official', url: `https://www.google.com/search?q=${encodeURIComponent(`site:arrma-rc.com ${query} ARRMA`)}` });
   links.unshift({ label: 'Search FCT Hobby Saudi', url: `https://www.google.com/search?q=${encodeURIComponent(`site:fcthobby.com/en ${query} ${scopedBrand !== 'Auto' ? scopedBrand : ''}`)}` });
@@ -654,7 +724,8 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return httpError(res, 405, 'Use GET.');
   const raw = Array.isArray(req.query?.q) ? req.query.q[0] : req.query?.q;
   const query = text(raw).slice(0, 64);
-  if (!isLikelyCode(query)) return httpError(res, 400, 'Enter a barcode or manufacturer part number with at least 2 characters.');
+  const directHpi = hpiReference(query);
+  if (!isLikelyCode(query) && !directHpi.code) return httpError(res, 400, 'Enter a barcode, manufacturer part number, or official HPI kit/part link.');
   const rawBrand = Array.isArray(req.query?.brand) ? req.query.brand[0] : req.query?.brand;
   const scopedBrand = safeBrand(rawBrand || 'Auto');
 
@@ -690,7 +761,7 @@ export default async function handler(req, res) {
     ok: true,
     query,
     scopedBrand,
-    kind: isBarcode(query) ? 'barcode' : 'part_number',
+    kind: directHpi.route === 'kit' ? 'rc_car' : (isBarcode(query) ? 'barcode' : 'part_number'),
     results,
     fallbackLinks: fallbackLinks(query, scopedBrand),
     providerStatus,
@@ -717,6 +788,7 @@ export const __test__ = {
   scoreCandidate,
   confidence,
   hpiCode,
+  hpiReference,
   xrayCode,
   stripHtml,
   firstListAfter,

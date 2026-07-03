@@ -251,7 +251,7 @@
     <header class="topbar">
       <div class="brand">
         <img src="icon-192.png" alt="The Hobbies Club" />
-        <div><h1>The Hobbies Club <span class="version">V17.0</span></h1><p class="subhead">Scan a code. Find live RC SKU details. Save the right part.</p></div>
+        <div><h1>The Hobbies Club <span class="version">V18.0</span></h1><p class="subhead">Scan a code. Find live RC SKU details. Save the right part.</p></div>
       </div>
       <nav class="nav" aria-label="App views">
         <button id="lookupTab" class="active" type="button">SKU lookup</button>
@@ -280,7 +280,7 @@
         <section class="card lookup-card">
           <div class="eyebrow">Online RC parts lookup</div>
           <h2>Find the SKU behind the label.</h2>
-          <p>Scan a barcode, or enter the manufacturer part number. Select a brand for codes that are only numbers, such as XRAY or HPI parts.</p>
+          <p>Scan a barcode, enter a manufacturer part number, or paste an official HPI kit link. Select a brand for numeric codes, such as XRAY or HPI parts.</p>
           <form id="lookupForm" class="lookup-form">
             <select id="lookupBrand" aria-label="Brand scope">
               <option value="Auto">Brand: Auto</option>
@@ -406,7 +406,7 @@
   <script>
     const $ = selector => document.querySelector(selector);
     const $$ = selector => [...document.querySelectorAll(selector)];
-    const APP_VERSION = '17.0';
+    const APP_VERSION = '18.0';
     const DB_NAME = 'the-hobbies-club-local-database';
     const DB_VERSION = 1;
     const PARTS_STORE = 'parts';
@@ -485,7 +485,7 @@
       body.innerHTML=rows.map(part=>{ const image=safeUrl(part.imageUrl); const isCar=(part.itemType||'part')==='rc-car'; const title=escapeHtml(part.name||(isCar?'Untitled RC car':'Untitled part')); const code=escapeHtml(part.partNumber||part.barcode||(isCar?'No stock code':'No part number')); const car=escapeHtml(part.carName||'—'); const id=escapeHtml(part.id); const typeLabel=isCar?'RC car':'RC part'; const icon=isCar?'🏎️':'⚙'; return `<tr><td><div class="part-cell">${image?`<img src="${escapeHtml(image)}" alt="" />`:`<div class="part-mini">${icon}</div>`}<button class="part-open" type="button" data-open-part="${id}"><strong>${title}</strong><span>${escapeHtml(part.brand||'Unknown brand')} · ${code}</span></button></div></td><td><span class="type-badge">${typeLabel}</span></td><td>${car}</td><td><strong>${Number(part.quantity||0)}</strong></td><td class="price-sar">${priceSar(part.priceSar)}</td><td>${escapeHtml(part.bin||'—')}</td><td>${escapeHtml(part.source||'—')}</td><td><div class="row-actions"><button class="icon-btn" type="button" data-add-one="${id}" title="Add one">＋</button><button class="icon-btn" type="button" data-edit-part="${id}" title="Edit">✎</button><button class="icon-btn delete" type="button" data-delete-part="${id}" title="Delete">⌫</button></div></td></tr>`; }).join('');
     }
     function openSaveForm(part={}) { $('#partId').value=part.id||''; $('#partType').value=(part.itemType||part.type||'part')==='rc-car'?'rc-car':'part'; $('#partName').value=part.name||part.title||''; $('#partBrand').value=part.brand||''; $('#partCar').value=part.carName||part.car||part.platform||''; $('#partNumber').value=part.partNumber||''; $('#partBarcode').value=part.barcode||''; $('#partQty').value=part.quantity??1; $('#partPriceSar').value=part.priceSar??''; $('#partBin').value=part.bin||''; $('#partCategory').value=part.category||''; $('#partSource').value=part.source||part.sources?.[0]?.supplier||''; $('#partProductUrl').value=part.productUrl||productLink(part)||''; $('#partImage').value=part.imageUrl||''; $('#partNotes').value=part.notes||part.description||''; openModal('saveModal'); setTimeout(()=>$('#partName').focus(),100); }
-    function saveResult(index) { const candidate=state.lastLookup?.results?.[Number(index)]; if(!candidate) return; const fitmentNote=candidate.fitment?`Fitment: ${candidate.fitment}`:''; const source=candidate.sources?.find(item=>item?.url)||candidate.sources?.[0]||{}; openSaveForm({ ...candidate, source:source.supplier||candidate.provenance?.[0]||'', productUrl:source.url||'', priceSar:parseSar(source), notes:[candidate.description,fitmentNote].filter(Boolean).join('\n\n') }); }
+    function saveResult(index) { const candidate=state.lastLookup?.results?.[Number(index)]; if(!candidate) return; const fitmentNote=candidate.fitment?`Fitment: ${candidate.fitment}`:''; const source=candidate.sources?.find(item=>item?.url)||candidate.sources?.[0]||{}; const isCar=(candidate.itemType||'part')==='rc-car'; openSaveForm({ ...candidate, itemType:isCar?'rc-car':'part', carName:candidate.carName||candidate.platform||'', category:candidate.category||(isCar?'RC Car':''), source:source.supplier||candidate.provenance?.[0]||'', productUrl:source.url||'', priceSar:parseSar(source), notes:[candidate.description,fitmentNote].filter(Boolean).join('\n\n') }); }
     async function submitSave() { const id=$('#partId').value||uid(); const part={ id,itemType:text($('#partType').value)==='rc-car'?'rc-car':'part',name:text($('#partName').value),brand:text($('#partBrand').value),carName:text($('#partCar').value),partNumber:text($('#partNumber').value),barcode:text($('#partBarcode').value),quantity:Math.max(0,Number($('#partQty').value||0)),priceSar:numberOrBlank($('#partPriceSar').value),bin:text($('#partBin').value),category:text($('#partCategory').value),source:text($('#partSource').value),productUrl:safeUrl($('#partProductUrl').value),imageUrl:safeUrl($('#partImage').value),notes:text($('#partNotes').value),updatedAt:new Date().toISOString()}; if(!part.name){showToast('Item name is required.');return;} const position=state.inventory.findIndex(item=>item.id===id); if(position>=0)state.inventory[position]=part;else state.inventory.unshift(part); await saveInventory(); closeModal('saveModal'); showToast(position>=0?'Item updated.':'Item saved to your vault.'); }
     async function addOne(id) { const part=state.inventory.find(item=>item.id===id); if(!part)return; part.quantity=Number(part.quantity||0)+1; part.updatedAt=new Date().toISOString(); await saveInventory(); showToast('Quantity increased by one.'); }
     async function deletePart(id) { const part=state.inventory.find(item=>item.id===id); if(!part)return; if(!confirm(`Delete “${part.name}” from your vault?`))return; state.inventory=state.inventory.filter(item=>item.id!==id); await saveInventory(); closeModal('detailModal'); showToast('Item deleted.'); }
