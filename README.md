@@ -1,57 +1,44 @@
-# RC Vault V12 · brand-aware parts lookup and searchable vault
+# RC Vault V13 · Local database, backup and restore
 
 ## What changed
 
-### Better lookup for XRAY and other brands
+RC Vault V13 saves your inventory in **IndexedDB**, a local database inside the browser on the device running the app.
 
-A bare numeric part number is not unique across the RC world. V12 therefore adds a **Brand** selector before every lookup.
+- Your parts stay on your iPhone, iPad, Mac, or computer.
+- Nothing is uploaded to a cloud database by this feature.
+- V13 automatically migrates V12, V11, V10, and V9 local records on the same browser and device.
+- Your earlier data remains local. V13 copies it into the new local database the first time it opens.
 
-- Select **XRAY** before checking an XRAY numeric part number, such as `301025`.
-- Select **HPI Racing** before checking an HPI number, such as `101211`.
-- Select **Auto** for UPC, EAN, GTIN, or part numbers that carry an unmistakable prefix, such as `ARA-1606`.
+## Backups
 
-V12 uses:
+Inside **My vault**, V13 now includes:
 
-1. Direct HPI official resolver for HPI part numbers.
-2. Direct XRAY official route only when **XRAY** is selected.
-3. Barcode Lookup and Go-UPC for barcode coverage when their keys are present.
-4. Brand-aware Google and Google Shopping searches through SerpApi for Traxxas, ARRMA, Axial, Losi, Team Associated, Tamiya, Kyosho, Maverick, and any part not matched by an official route.
+- **Backup now**: creates a full JSON backup containing every saved part, price, barcode, location, notes, and product link.
+- On iPhone and iPad, the app opens the Share sheet when supported. Choose **Save to Files** and save the file in a folder such as `On My iPhone/RC Vault Backups`.
+- On Mac or desktop, the backup downloads as a JSON file.
+- **Restore backup**: read a previous JSON backup and either merge it with the current device or replace the current local vault.
+- **Undo last restore**: return to the local vault that existed before the most recent restore.
+- **Weekly backup reminder**: appears when no backup exists or the last backup is at least seven days old.
 
-This prevents the old system from treating a numeric XRAY number as an unknown generic code or, worse, an unrelated HPI part.
+The CSV export remains available for Excel reporting. CSV does not restore records. Use the JSON backup for restore.
 
-## New inventory features
+## Important local-storage limits
 
-- Manual **Price, SAR** field.
-- Stored **Product link** field.
-- Click a saved part to open a details screen.
-- Click the product name or image in lookup results to open its online listing.
-- Search My Vault by **brand**, **car name/platform**, **part number**, **barcode**, or any keyword.
-- CSV export now includes car name, price in SAR, and product link.
-- V12 migrates local records from V10 and V11 automatically on the same device.
+Browser storage is local and private, but it can be removed if you clear browser website data, reset your device, or delete the browser profile. Do not rely on the app alone.
 
-## Environment variables
+Create a JSON backup before major changes, before changing device, and at least once a week.
 
-Add your keys in Vercel under **Project → Settings → Environment Variables**, then redeploy:
+## Deploy V13
 
-```text
-SERPAPI_API_KEY=your_real_key
-BARCODELOOKUP_API_KEY=your_real_key
-GOUPC_API_KEY=your_real_key
-```
+1. Extract this ZIP.
+2. Replace the files in your existing Vercel project.
+3. Redeploy.
+4. Open the deployment in Safari.
+5. Remove the old Home Screen shortcut and add the new one again.
+6. Confirm the header shows **V13.0**.
+7. Open **My vault**. Your existing parts should migrate automatically.
+8. Tap **Backup now** after confirming the inventory.
 
-Only SerpApi is needed for wide, brand-aware online coverage. Barcode Lookup and Go-UPC help with UPC, EAN, and GTIN labels.
+## Online lookup
 
-## Deploy
-
-1. Extract the ZIP.
-2. Upload the extracted files to the root of your Vercel project.
-3. Add environment variables.
-4. Redeploy.
-5. Open the new deployment in Safari.
-6. Delete the old Home Screen RC Vault icon and add the new one again.
-
-The header must show **V12.0**. This confirms the installed copy is current.
-
-## Important usage note
-
-Use **brand selection** for labels that provide only a number. The app cannot safely know whether an unbranded six-digit number belongs to XRAY, HPI, Traxxas, or another manufacturer without a barcode database match or a brand clue.
+The lookup service remains unchanged. Keep your valid `SERPAPI_API_KEY` in Vercel for brand-aware Google and Shopping lookup. Barcode Lookup and Go-UPC remain optional sources for UPC, EAN, and GTIN labels.
