@@ -1,21 +1,28 @@
-# The Hobbies Club V18
+# The Hobbies Club V19
 
-## HPI complete car lookup update
+## Added: Gus Stuff
 
-This version supports both HPI spare-part pages and HPI complete kit pages.
+The Mac web app now has a third manual inventory type called **Gus Stuff**.
 
-### You can now use
+Choose **Add Gus Stuff** in My Vault. It uses only:
 
-- A scanned HPI kit number such as `160586`.
-- A pasted official HPI kit URL such as `https://www.hpiracing.com/en/kit/160586`.
-- A standard HPI part number.
+- Item name
+- Brand
+- Item for
+- Barcode
+- Category
+- Sub category
+- Stock
+- Value in Saudi Riyals
+- Local photo
+- Notes
 
-When the official HPI result is a kit, it returns as **RC car** and preselects **RC car** when you choose to save it.
+Gus Stuff hides RC-specific fields such as fitment, part number, supplier, product link, and storage bin.
 
-## Important deployment files included
+## Photos
 
-This package includes the Vercel API routes and the local barcode scanner engine. Deploy the complete folder contents to the same Vercel project.
+Choose a photo directly from your Mac or phone. The app stores a compressed local copy in the browser database and includes it in JSON backups.
 
-## Test
+## Deploy
 
-Run `npm test` to validate the HPI kit-link parser.
+Replace your existing web-project files with this version and deploy on the same Vercel project. Existing RC inventory stays available because this version uses the same local IndexedDB database.
